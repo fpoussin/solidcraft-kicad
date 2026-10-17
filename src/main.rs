@@ -16,12 +16,18 @@ use solidcraft_kicad::{
 };
 use solidcraft_mcp::Remote;
 
+#[cfg(any(test, not(debug_assertions)))]
+mod update;
+
 #[derive(Parser)]
 #[command(
     version,
     about = "Import KiCad PCBs as native SolidCraft component assemblies"
 )]
 struct Cli {
+    /// Disable the release-build update check (interactive terminals only).
+    #[arg(long, global = true)]
+    no_update_check: bool,
     /// Print the detailed JSON report on success.
     #[arg(long, global = true)]
     json: bool,
@@ -239,8 +245,11 @@ fn confirm_overwrite(output: &Path, force: bool) -> Result<bool> {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    #[cfg(not(debug_assertions))]
+    let updates =
+        update::Check::start(!cli.no_update_check && !cli.json && io::stderr().is_terminal());
     let print_json = cli.json;
-    match run(cli) {
+    let status = match run(cli) {
         Ok(report) if print_json => match serde_json::to_string_pretty(&report) {
             Ok(text) => {
                 println!("{text}");
@@ -256,5 +265,8 @@ fn main() -> ExitCode {
             eprintln!("error: {error}");
             ExitCode::FAILURE
         }
-    }
+    };
+    #[cfg(not(debug_assertions))]
+    updates.notify();
+    status
 }

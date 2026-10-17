@@ -72,6 +72,13 @@ references, prefix overrides and omissions:
 solidcraft-kicad build path/to/board.kicad_pcb --json
 ```
 
+Release builds check GitHub for newer stable releases in the background, at most
+once a day, and show an update notice on interactive stderr after the command.
+Checks never delay conversion; offline failures are silent. Debug builds,
+`--json`, redirected stderr, and `--help`/`--version` do not check for updates.
+Use `--no-update-check` to disable checking and notices. The cache is stored in
+the platform's user cache directory under `solidcraft-kicad`.
+
 Builds include front and back silkscreen, soldermask with its openings, pads,
 plated holes, and outer copper tracks, vias and filled zones by default.
 Soldermask and silkscreen colours come from the PCB's

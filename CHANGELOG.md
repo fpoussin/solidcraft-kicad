@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Release builds notify interactive users about newer stable GitHub releases,
+  using a daily background check. Offline failures are silent; debug builds,
+  JSON output, and redirected stderr skip checking. `--no-update-check` opts out.
+
 ## 0.1.0
 
 First release of solidcraft-kicad: import KiCad PCBs as self-contained, coloured
