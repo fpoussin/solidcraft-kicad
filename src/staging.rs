@@ -1,0 +1,335 @@
+use std::{
+    fs::File,
+    io::Read,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    time::Duration,
+};
+
+use serde::Serialize;
+use serde_json::{Value, json};
+use tempfile::TempDir;
+use wait_timeout::ChildExt;
+
+use crate::{
+    assembly, cad,
+    config::Settings,
+    error::{Error, Result},
+    inventory::{self, Inventory},
+};
+
+#[derive(Debug, Serialize)]
+pub struct Asset {
+    pub reference: String,
+    pub path: PathBuf,
+    pub measurement: Value,
+}
+
+pub struct Staged {
+    dir: Option<TempDir>,
+    pub id: String,
+    pub inventory: Inventory,
+    pub kicad_version: String,
+    pub assets: Vec<Asset>,
+    pub omissions: Vec<String>,
+    pub warnings: Vec<String>,
+    pub assembly: Option<assembly::Prepared>,
+}
+
+impl Staged {
+    pub fn keep(&mut self) -> PathBuf {
+        self.dir.take().map(TempDir::keep).unwrap_or_default()
+    }
+}
+
+pub struct Exporter<'a> {
+    pub program: &'a Path,
+    pub timeout: Duration,
+    pub settings: &'a Settings,
+}
+
+impl Exporter<'_> {
+    fn run(
+        &self,
+        args: &[std::ffi::OsString],
+        directory: &Path,
+        log: &Path,
+    ) -> Result<(bool, String)> {
+        let out = File::create(log)?;
+        let mut command = Command::new(self.program);
+        command
+            .args(args)
+            .current_dir(directory)
+            .env("LC_ALL", "C")
+            .env("LANG", "C")
+            .stdin(Stdio::null())
+            .stdout(out.try_clone()?)
+            .stderr(out);
+        for (name, prefix) in &self.settings.model_prefixes {
+            command.env(name, &prefix.path);
+        }
+        let mut child = command
+            .spawn()
+            .map_err(|e| Error::message(format!("cannot start {}: {e}", self.program.display())))?;
+        let status = match child.wait_timeout(self.timeout)? {
+            Some(status) => status,
+            None => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(Error::message(format!(
+                    "KiCad export exceeded {} seconds",
+                    self.timeout.as_secs()
+                )));
+            }
+        };
+        let mut text = String::new();
+        File::open(log)?
+            .take(4 * 1024 * 1024 + 1)
+            .read_to_string(&mut text)?;
+        if text.len() > 4 * 1024 * 1024 {
+            return Err(Error::message("KiCad diagnostics exceeded 4 MiB"));
+        }
+        Ok((status.success(), text))
+    }
+
+    fn export(
+        &self,
+        input: &Inventory,
+        directory: &Path,
+        label: &str,
+        reference: Option<&str>,
+        all: bool,
+    ) -> Result<(PathBuf, String, bool)> {
+        let format = if all { "glb" } else { "step" };
+        let step = directory.join(format!("{label}.{format}"));
+        let mut args: Vec<std::ffi::OsString> = [
+            "pcb",
+            "export",
+            format,
+            "--subst-models",
+            "--no-dnp",
+            "--user-origin",
+            "0x0mm",
+            "--output",
+        ]
+        .iter()
+        .map(Into::into)
+        .collect();
+        args.push(step.clone().into_os_string());
+        if let Some(reference) = reference {
+            args.extend([
+                "--no-board-body".into(),
+                "--component-filter".into(),
+                reference.into(),
+            ]);
+        } else if !all {
+            args.push("--board-only".into());
+        }
+        for (key, value) in &self.settings.project_variables {
+            args.extend(["--define-var".into(), format!("{key}={value}").into()]);
+        }
+        args.push(input.source.clone().into_os_string());
+        let (success, log) = self.run(
+            &args,
+            input
+                .source
+                .parent()
+                .ok_or_else(|| Error::message("PCB has no parent"))?,
+            &directory.join(format!("{label}.log")),
+        )?;
+        Ok((step, log, success))
+    }
+
+    pub fn stage(&self, inventory: Inventory, allow_missing: bool) -> Result<Staged> {
+        self.stage_impl(inventory, allow_missing, false)
+    }
+
+    pub fn stage_build(&self, inventory: Inventory, allow_missing: bool) -> Result<Staged> {
+        self.stage_impl(inventory, allow_missing, true)
+    }
+
+    fn stage_impl(&self, inventory: Inventory, allow_missing: bool, all: bool) -> Result<Staged> {
+        let dir = tempfile::Builder::new()
+            .prefix("solidcraft-kicad-")
+            .tempdir()?;
+        let id = dir
+            .path()
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| Error::message("temporary path is not UTF-8"))?
+            .to_string();
+        let parent = inventory
+            .source
+            .parent()
+            .ok_or_else(|| Error::message("PCB has no parent"))?;
+        let (success, version) =
+            self.run(&["version".into()], parent, &dir.path().join("version.log"))?;
+        if !success || !version.trim().starts_with("10.") {
+            return Err(Error::message(format!(
+                "KiCad 10 is required, got: {}",
+                version.trim()
+            )));
+        }
+        let mut stage = Staged {
+            id,
+            kicad_version: version.trim().into(),
+            assets: Vec::new(),
+            omissions: Vec::new(),
+            warnings: inventory.warnings.clone(),
+            assembly: None,
+            inventory,
+            dir: Some(dir),
+        };
+        let directory = stage
+            .dir
+            .as_ref()
+            .ok_or_else(|| Error::message("missing staging folder"))?
+            .path()
+            .to_path_buf();
+        if all {
+            let (step, log, success) =
+                self.export(&stage.inventory, &directory, "assembly", None, true)?;
+            if !success || export_problem(&log) {
+                if !success || !allow_missing {
+                    return Err(Error::message(format!(
+                        "KiCad could not export every assigned model\n{}\nOmit --strict-models to permit incomplete component geometry.",
+                        log.trim()
+                    )));
+                }
+                stage.omissions.push(
+                    log.lines()
+                        .filter(|line| export_problem(line))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                );
+            }
+            let (assembly, parts, omissions) =
+                assembly::prepare(&step, &stage.inventory, allow_missing)?;
+            stage.omissions.extend(omissions);
+            stage.assets = parts
+                .into_iter()
+                .map(|p| Asset {
+                    reference: p.reference,
+                    path: step.clone(),
+                    measurement: json!({"body_count": p.bodies}),
+                })
+                .collect();
+            stage.assembly = Some(assembly);
+            for line in log
+                .lines()
+                .filter(|l| l.to_ascii_lowercase().contains("warning"))
+            {
+                stage.warnings.push(line.into());
+            }
+            if inventory::hash(&stage.inventory.source)? != stage.inventory.sha256 {
+                return Err(Error::message(
+                    "PCB changed during staging; no assembly was built",
+                ));
+            }
+            return Ok(stage);
+        }
+        let mut parts = vec![("PCB".to_string(), None, Vec::new())];
+        parts.extend(
+            stage
+                .inventory
+                .footprints
+                .iter()
+                .filter(|f| !f.dnp && !f.models.is_empty())
+                .map(|f| {
+                    (
+                        f.reference.clone(),
+                        Some(f.reference.clone()),
+                        f.models.clone(),
+                    )
+                }),
+        );
+        for (index, (reference, filter, models)) in parts.into_iter().enumerate() {
+            let label = format!("part-{index}");
+            let (step, log, success) = self.export(
+                &stage.inventory,
+                &directory,
+                &label,
+                filter.as_deref(),
+                false,
+            )?;
+            let diagnostic_error = export_problem(&log);
+            if !success || diagnostic_error {
+                let message = format!(
+                    "{reference}: KiCad could not export every assigned model\nmodels: {}\n{}",
+                    models.join(", "),
+                    log.trim()
+                );
+                if filter.is_none() || !allow_missing {
+                    return Err(Error::message(format!(
+                        "{message}\nOmit --strict-models to permit incomplete component geometry."
+                    )));
+                }
+                stage.omissions.push(message);
+            }
+            let native = directory.join(format!("{label}.solidcraft"));
+            match cad::import_asset(&step, &native) {
+                Ok(measurement) => stage.assets.push(Asset {
+                    reference: reference.clone(),
+                    path: native,
+                    measurement,
+                }),
+                Err(error) if filter.is_some() && allow_missing => stage.omissions.push(format!(
+                    "{reference}: omitted; models: {}; {error}",
+                    models.join(", ")
+                )),
+                Err(error) => {
+                    return Err(Error::message(format!(
+                        "{reference}: models {}; {error}\n{}",
+                        models.join(", "),
+                        log.trim()
+                    )));
+                }
+            }
+            if !diagnostic_error && !log.trim().is_empty() {
+                for line in log
+                    .lines()
+                    .filter(|l| l.to_ascii_lowercase().contains("warning"))
+                {
+                    stage.warnings.push(format!("{reference}: {line}"));
+                }
+            }
+        }
+        if inventory::hash(&stage.inventory.source)? != stage.inventory.sha256 {
+            return Err(Error::message(
+                "PCB changed during staging; no assembly was inserted",
+            ));
+        }
+        Ok(stage)
+    }
+}
+
+fn export_problem(log: &str) -> bool {
+    let log = log.to_ascii_lowercase();
+    [
+        "could not add 3d model",
+        "file not found",
+        "error:",
+        "failed to",
+        "unable to",
+        "cannot load",
+        "could not load",
+        "cannot read",
+        "could not read",
+    ]
+    .iter()
+    .any(|s| log.contains(s))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn successful_exit_does_not_hide_missing_model_diagnostics() {
+        assert!(export_problem(
+            "Could not add 3D model for U1.\nFile not found: ${CUSTOM}/GPS.STEP\nSTEP file created."
+        ));
+        assert!(!export_problem(
+            "Warning: Legacy zone fill strategy is not supported anymore.\nSTEP file created."
+        ));
+    }
+}

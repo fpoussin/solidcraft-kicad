@@ -1,0 +1,263 @@
+# solidcraft-kicad
+
+Import a KiCad PCB as a native SolidCraft component assembly, or insert it directly
+into an open assembly. Rust orchestration reuses KiCad's model resolver/exporter,
+KiUtils, and SolidCraft's own engine, document writer, and control client.
+
+The result is a PCB parent component with a substrate child and a child per
+populated footprint with visible assigned models. Builds use coloured triangle
+meshes so even large boards open quickly. Each footprint can be moved or hidden
+independently; moving the parent moves the board and its parts together. Colours
+and KiCad's model placement are retained. Saved designs embed the geometry and
+do not depend on temporary assets.
+
+## Requirements and installation
+
+- Rust 1.95 or later, Cargo, and a C compiler for upstream native dependencies.
+- KiCad 10's `kicad-cli` on `PATH`, its model libraries, and your usual KiCad path
+  configuration.
+- SolidCraft **0.14.0** for live insertion. Offline builds use the pinned 0.14.0
+  Rust engine and do not require the desktop application or `solidcraft-cli`.
+
+```sh
+cargo build --locked --release
+./target/release/solidcraft-kicad --help
+```
+
+The SolidCraft dependency and its required kernel patches are pinned to release
+commit `2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae`. `Cargo.lock` is committed. The
+upstream crates include the CAD kernel; the first compilation is larger than a
+typical command-line utility. There is no runtime dependency on FreeCAD.
+
+## Build a native part assembly
+
+```sh
+solidcraft-kicad build path/to/board.kicad_pcb
+```
+
+This creates `board.solidcraft` in the current directory. Use `--output FILE` to
+choose another filename or directory. Open the resulting file in SolidCraft.
+If the output exists, interactive terminals prompt before replacing it (default:
+Yes). Use `--force` (`-f`) to overwrite without prompting, including in scripts:
+
+```sh
+solidcraft-kicad build path/to/board.kicad_pcb --force
+```
+
+The existing file is replaced atomically after a successful conversion.
+Successful builds and insertions show a progress bar only when stderr is an
+interactive terminal. Redirected output stays quiet; warnings and errors go to
+stderr. Add `--json` to print a
+report to stdout with source hash, exported references, prefix overrides and
+omissions:
+
+```sh
+solidcraft-kicad build path/to/board.kicad_pcb --json
+```
+
+Builds export the complete assembly once as a binary glTF (GLB). The writer
+preserves placements and material colours, converts metres/Y-up to KiCad's
+millimetres/Z-up, and groups all model meshes under their footprint references.
+Identical geometry with matching colours is stored once, with a named occurrence
+for each footprint. Each occurrence retains its own placement and visibility;
+different colours remain separate definitions. Native mesh geometry avoids STEP
+reconstruction and surface tessellation both during conversion and when
+SolidCraft opens the file.
+
+`--json --measure` also includes mesh dimensions, volume and area in the report.
+These measurements describe the exported triangles; builds are intended for
+assembly placement and visual fit checks, rather than editing exact CAD surfaces.
+
+For example, a board's component tree might look like:
+
+```text
+board
+├── PCB
+├── C1
+├── J1
+├── R1
+├── U1
+└── …
+```
+
+Each part may contain several mesh bodies to retain different material colours.
+Imported geometry uses the common KiCad board frame; editable footprint-local
+sketch history is not reconstructed.
+
+## Insert into an open assembly
+
+Start SolidCraft with its control channel enabled:
+
+```sh
+solidcraft --control 7878
+solidcraft-kicad insert path/to/board.kicad_pcb --port 7878
+```
+
+Live insertion uses the existing B-rep workflow and can take longer than building
+and opening a mesh assembly. Its contents are rigidly grouped; use Unlock
+Contents to move those parts separately.
+
+The existing `solidcraft-mcp::Remote` client finds SolidCraft's per-launch token
+automatically, including `SOLIDCRAFT_CONTROL_TOKEN` and `SOLIDCRAFT_CONTROL_DIR`.
+The companion connects only to loopback. It does not start, restart, switch tabs,
+or save the desktop application.
+
+Keep the intended assembly active until insertion completes. Finish active
+tools/dialogs, move the timeline to its end, and disable the agent cursor before
+inserting. Unsaved designs are supported. The companion snapshots the destination
+before staging and checks it again immediately before sending the insertion.
+SolidCraft 0.14.0 has no document-target precondition, so this check cannot lock
+the active tab against a concurrent switch.
+
+The new PCB is inserted at the design root and the current authoring component
+is preserved. Names receive numeric suffixes when required by existing component
+or instance labels. Names are selected before construction because 0.14.0 does
+not update occurrence labels when a component is renamed.
+
+All live mutations use one direct `engine.batch` with rollback enabled. Command
+failure restores the checkpoint; successful insertion follows SolidCraft's
+normal multiple-entry undo history. On a lost or timed-out reply, the operation
+may have run: the companion never repeats it and retains staging files at the
+reported path. Inspect the application before another invocation. Each normal
+invocation adds a new assembly; it does not update an earlier import.
+
+## Finding 3D models
+
+With no companion configuration, KiCad resolves the source's model paths using
+its own installation defaults, Configure Paths settings, environment and project
+location. This includes `${KICAD10_3DMODEL_DIR}`, `${KIPRJMOD}`, and custom prefixes
+such as `${CUSTOM_3DMODELS}`. Configure Paths variables need not exist in your
+shell environment. `KICAD_CONFIG_HOME` is inherited. The original board stays in
+its original project directory during export.
+
+Optional TOML configuration supplies prefix overrides:
+
+```toml
+[model_prefixes]
+CUSTOM_3DMODELS = "../kicad-libs/3d"
+KICAD10_3DMODEL_DIR = "/usr/share/kicad/3dmodels"
+```
+
+Configuration sources, highest priority first:
+
+1. Repeatable `--model-prefix NAME=PATH` arguments.
+2. `--config FILE`, or the nearest `solidcraft-kicad.toml` found walking upward
+   from the PCB directory.
+3. User `config.toml` in the platform configuration folder (Linux:
+   `$XDG_CONFIG_HOME/solidcraft-kicad/config.toml`, normally
+   `~/.config/solidcraft-kicad/config.toml`).
+4. KiCad's normal resolution.
+
+Figment resolves paths from TOML files relative to the file that defined each
+value. CLI paths are relative to the invocation directory. Use absolute paths or
+ordinary relative paths; shell-style `~` expansion inside TOML is not supported.
+Overrides apply only to KiCad child processes, never to your KiCad settings or
+the parent environment. `KIPRJMOD` cannot be overridden.
+
+```sh
+solidcraft-kicad build board.kicad_pcb --output board.solidcraft \
+  --model-prefix CUSTOM_3DMODELS=/data/models \
+  --define-var VARIANT=production
+```
+
+`--define-var KEY=VALUE` forwards project variables to KiCad. Conflicting repeated
+values, or different values for the same model-prefix/project-variable key,
+are errors. `--kicad-cli PATH` selects another executable; `--timeout SECONDS`
+sets the per-process timeout (default 120).
+
+STEP substitution is enabled for VRML references. KiCad resolves a suitable STEP
+or IGES counterpart and exports its geometry; embedded models are delegated to
+KiCad too.
+
+## Missing models and geometry limits
+
+Missing or unreadable assigned models are permitted by default. Available
+geometry is retained, with omitted components reported as warnings on stderr and
+in the optional JSON report's `omissions` and `assigned_models_complete: false`.
+The substrate is always required. Use `--strict-models` to reject incomplete
+assigned-model exports:
+
+```sh
+solidcraft-kicad build board.kicad_pcb --strict-models
+```
+
+`--allow-missing-models` remains accepted for compatibility. Footprints without
+visible model assignments are reported separately as warnings; DNP footprints
+are excluded. Live insertion validates imported solids during staging; offline
+builds preserve KiCad's coloured meshes. `--measure` adds mesh measurements.
+Use `--json` to review omissions before relying on an assembly for fit checks.
+
+The fast export omits copper, pads, tracks and solder-mask geometry, so the
+exported substrate can be thinner than the board's nominal stack-up. Component
+placement follows KiCad's export, including its stack-up offsets. Native mesh
+components support visual fit checks, placement
+and visibility; editable board sketches, synchronization and ECAD
+write-back are deferred. The current input limits are 64 MiB and 1000 footprints.
+
+The application owns source-path/hash/reference provenance under the native
+metadata key `org.solidcraft-kicad.imports`. It leaves other metadata intact.
+
+## Development and validation
+
+```sh
+cargo fmt --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked
+```
+
+Normal tests need no KiCad installation or GUI: an analytic solid and a fake
+exporter exercise one-export assembly construction, colours, persistence,
+individual visibility and movement, collisions in names, rollback, destination
+changes, missing-model policy and lost replies.
+Board-specific acceptance tests are ignored by default because their source
+boards and model libraries are not bundled. See [tests/assembly.rs](tests/assembly.rs)
+for their required environment variables and expected geometry.
+To exercise the actual desktop control channel on Linux, use a separate app
+under Xvfb (requires `xvfb-run`):
+
+```sh
+python3 scripts/validate-desktop.py --app /path/to/SolidCraft.AppImage \
+  --board /path/to/board.kicad_pcb --cli target/debug/solidcraft-kicad \
+  --expected-solids 42
+```
+
+This launches a disposable desktop with isolated settings and a private control
+token. It inserts into an assembly containing an analytic test solid, verifies
+that solid is unchanged, and writes screenshots, the native assembly and JSON
+evidence under the ignored `artifacts/desktop` directory. It never connects to
+your existing application. Set `--expected-solids` to the number of imported
+solids expected for your board, including the substrate (42 is an example).
+This can differ from the footprint count because a model may contain several
+solids.
+
+Subprocess tests require normal local IPC; restrictive sandboxes may block the
+timeout library's signal pipe.
+
+To time native-file loading and the first render in an isolated desktop:
+
+```sh
+python3 scripts/validate-desktop.py --app /path/to/SolidCraft.AppImage \
+  --native /path/to/board.solidcraft --max-open-seconds 3
+```
+
+A development benchmark with 323 placed parts converted in **5.17 s**;
+SolidCraft 0.14.0 opened the result in **0.45 s**, with its first render ready in
+**0.70 s** in the isolated
+desktop. The placed parts, including the substrate, share 42 geometry
+definitions. Sharing reduced the file from 9.2 MB to **5.3 MB**.
+One unavailable model was reported as an omission. These are measured wall
+times on the development machine, excluding application startup.
+
+No KiCad source files are rewritten. KiCad itself can create local `.kicad_prl`
+preferences when loading a project that has none.
+
+## Dependencies and license
+
+This project is independently implemented and does not contain StepUp code.
+KiUtils parses metadata; KiCad exports geometry; SolidCraft imports, validates,
+builds and serializes designs. Offline conversion uses SolidCraft's document
+writer directly to preserve exported meshes. Clap handles arguments, Figment
+handles layered configuration and relative paths, and tempfile manages staging.
+
+Licensed under MIT or Apache-2.0, at your option. Upstream dependencies retain
+their own licenses and notices. See [ATTRIBUTION.md](ATTRIBUTION.md).

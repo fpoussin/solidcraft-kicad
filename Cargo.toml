@@ -1,0 +1,50 @@
+[package]
+name = "solidcraft-kicad"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT OR Apache-2.0"
+description = "Import KiCad PCBs as native SolidCraft component assemblies"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+directories = "6"
+figment = { version = "0.10", features = ["toml"] }
+kiutils_kicad = "0.3"
+kiutils_sexpr = "0.1.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+solidcraft-engine = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
+solidcraft-mcp = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
+tempfile = "3"
+thiserror = "2"
+wait-timeout = "0.2"
+
+# Upstream's kernel patches are part of the v0.14.0 dependency graph.
+# Cargo only applies patches from the top-level manifest.
+[patch.crates-io]
+truck-geometry = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
+truck-shapeops = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
+truck-stepio = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
+truck-meshalgo = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
+matext4cgmath = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
+
+[profile.dev]
+debug = 0
+incremental = false
+
+[profile.test]
+debug = 0
+incremental = false
+
+[profile.release]
+strip = true
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"

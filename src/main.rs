@@ -1,0 +1,221 @@
+use std::{
+    io::{self, IsTerminal, Write},
+    path::{Path, PathBuf},
+    process::ExitCode,
+    time::Duration,
+};
+
+use clap::{Args, Parser, Subcommand};
+use serde_json::{Value, json};
+use solidcraft_kicad::{
+    cad, config,
+    error::{Error, Result},
+    inventory,
+    progress::Progress,
+    staging::Exporter,
+};
+use solidcraft_mcp::Remote;
+
+#[derive(Parser)]
+#[command(
+    version,
+    about = "Import KiCad PCBs as native SolidCraft component assemblies"
+)]
+struct Cli {
+    /// Print the detailed JSON report on success.
+    #[arg(long, global = true)]
+    json: bool,
+    /// Include detailed geometry measurements in the JSON report (can be slow).
+    #[arg(long, global = true, requires = "json")]
+    measure: bool,
+    #[command(subcommand)]
+    command: Action,
+}
+
+#[derive(Subcommand)]
+enum Action {
+    /// Create a self-contained native SolidCraft assembly.
+    Build {
+        #[command(flatten)]
+        input: Input,
+        /// Destination file (defaults to the PCB filename in the current directory).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Overwrite an existing output file without prompting.
+        #[arg(short, long)]
+        force: bool,
+    },
+    /// Insert into the active running SolidCraft assembly, without saving it.
+    Insert {
+        #[command(flatten)]
+        input: Input,
+        #[arg(long, default_value_t = 7878, value_parser = clap::value_parser!(u16).range(1..))]
+        port: u16,
+    },
+}
+
+#[derive(Args)]
+struct Input {
+    /// Source PCB. It and its project settings stay in their original location.
+    board: PathBuf,
+    /// Replace automatic project-config discovery with this TOML file.
+    #[arg(long)]
+    config: Option<PathBuf>,
+    /// Override a KiCad model-path prefix for this invocation only.
+    #[arg(long, value_name = "NAME=PATH", value_parser = config::pair)]
+    model_prefix: Vec<(String, String)>,
+    /// Override a KiCad project variable.
+    #[arg(long, value_name = "KEY=VALUE", value_parser = config::pair)]
+    define_var: Vec<(String, String)>,
+    /// Permit omitted/partial component geometry (the default).
+    #[arg(long)]
+    allow_missing_models: bool,
+    /// Fail if an assigned component model is missing or unreadable.
+    #[arg(long, conflicts_with = "allow_missing_models")]
+    strict_models: bool,
+    /// KiCad 10 executable (defaults to PATH).
+    #[arg(long, default_value = "kicad-cli")]
+    kicad_cli: PathBuf,
+    /// Maximum seconds per KiCad subprocess.
+    #[arg(long, default_value_t = 120, value_parser = clap::value_parser!(u64).range(1..=3600))]
+    timeout: u64,
+}
+
+fn run(cli: Cli) -> Result<Value> {
+    let measure = cli.measure;
+    let (input, output, port, force) = match cli.command {
+        Action::Build {
+            input,
+            output,
+            force,
+        } => {
+            let output = match output {
+                Some(path) => path,
+                None => PathBuf::from(
+                    input
+                        .board
+                        .file_name()
+                        .ok_or_else(|| Error::message("source PCB has no filename"))?,
+                )
+                .with_extension("solidcraft"),
+            };
+            (input, Some(std::path::absolute(output)?), None, force)
+        }
+        Action::Insert { input, port } => (input, None, Some(port), false),
+    };
+    let mut overwrite = false;
+    if let Some(output) = &output {
+        if output
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_none_or(|e| !e.eq_ignore_ascii_case("solidcraft"))
+        {
+            return Err(Error::message("--output must end in .solidcraft"));
+        }
+        overwrite = confirm_overwrite(output, force)?;
+    }
+    let progress = Progress::new();
+    progress.stage(0, "Reading PCB");
+    let inventory = inventory::read(&input.board)?;
+    let settings = config::load(
+        &inventory.source,
+        input.config.as_deref(),
+        &input.model_prefix,
+        &input.define_var,
+    )?;
+    let mut remote = port
+        .map(|port| Remote::connect(&format!("127.0.0.1:{port}")))
+        .transpose()?;
+    let before = remote.as_mut().map(|b| cad::destination(b)).transpose()?;
+    let program = if input.kicad_cli.components().count() > 1 {
+        std::path::absolute(&input.kicad_cli)?
+    } else {
+        input.kicad_cli
+    };
+    let exporter = Exporter {
+        program: &program,
+        timeout: Duration::from_secs(input.timeout),
+        settings: &settings,
+    };
+    let allow_missing = input.allow_missing_models || !input.strict_models;
+    progress.stage(1, "Exporting and preparing components");
+    let mut stage = if output.is_some() {
+        exporter.stage_build(inventory, allow_missing)?
+    } else {
+        exporter.stage(inventory, allow_missing)?
+    };
+    let result = if let Some(output) = output {
+        progress.stage(2, "Writing SolidCraft file");
+        cad::build_with_options(&stage, &output, measure, overwrite)?
+    } else {
+        progress.stage(2, "Inserting components");
+        let b = remote
+            .as_mut()
+            .ok_or_else(|| Error::message("missing SolidCraft connection"))?;
+        cad::insert(
+            b,
+            &before.ok_or_else(|| Error::message("missing destination snapshot"))?,
+            &mut stage,
+        )?
+    };
+    progress.stage(3, "Complete");
+    drop(progress);
+    for warning in stage.warnings.iter().chain(&stage.omissions) {
+        eprintln!("Warning: {warning}");
+    }
+    Ok(json!({
+        "result": result, "source": stage.inventory.source,
+        "source_sha256": stage.inventory.sha256, "kicad_version": stage.kicad_version,
+        "solidcraft_version": "0.14.0", "assigned_models_complete": stage.omissions.is_empty(),
+        "parts": stage.assets.iter().map(|a| &a.reference).collect::<Vec<_>>(),
+        "model_prefix_overrides": settings.model_prefixes, "warnings": stage.warnings, "omissions": stage.omissions,
+    }))
+}
+
+fn confirm_overwrite(output: &Path, force: bool) -> Result<bool> {
+    if force || !output.exists() {
+        return Ok(force);
+    }
+    if !io::stdin().is_terminal() || !io::stderr().is_terminal() {
+        return Err(Error::message(format!(
+            "output already exists: {}; use --force to overwrite",
+            output.display()
+        )));
+    }
+    eprint!("Overwrite {}? [Y/n] ", output.display());
+    io::stderr().flush()?;
+    let mut answer = String::new();
+    let read = io::stdin().read_line(&mut answer)?;
+    let answer = answer.trim();
+    if read > 0
+        && (answer.is_empty()
+            || answer.eq_ignore_ascii_case("y")
+            || answer.eq_ignore_ascii_case("yes"))
+    {
+        Ok(true)
+    } else {
+        Err(Error::message("overwrite cancelled"))
+    }
+}
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let print_json = cli.json;
+    match run(cli) {
+        Ok(report) if print_json => match serde_json::to_string_pretty(&report) {
+            Ok(text) => {
+                println!("{text}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("error: {error}");
+                ExitCode::FAILURE
+            }
+        },
+        Ok(_) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("error: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}

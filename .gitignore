@@ -1,0 +1,5 @@
+/target/
+/artifacts/
+__pycache__/
+*.solidcraft
+*.step
