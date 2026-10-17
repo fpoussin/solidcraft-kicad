@@ -1,0 +1,29 @@
+# Changelog
+
+## 0.1.0
+
+First release of solidcraft-kicad: import KiCad PCBs as self-contained, coloured
+SolidCraft assemblies with independently movable and hideable components.
+
+- Fast native builds with shared component geometry and a CAD substrate that
+  displays outline and hole edges in Shaded with edges mode.
+- Both-side silkscreen, stackup-matched soldermask, plated pads and holes, and
+  outer copper tracks, vias and filled zones, enabled by default.
+- HASL, ENIG and other surface finishes, with optional layer exclusions.
+- Automatic filenames in the current directory, permissive missing models,
+  atomic overwrite handling, and interactive per-layer progress.
+- Optional JSON reports, configurable model paths, and live insertion into an
+  open SolidCraft assembly.
+
+Download the archive for **Linux x64**, **macOS arm64 (Apple Silicon)**, or
+**Windows x64**. Extract it and put `solidcraft-kicad` (or `solidcraft-kicad.exe`)
+on your `PATH`. `SHA256SUMS` contains archive checksums.
+
+Requires **KiCad 10** and its model libraries. Offline conversion uses the
+embedded SolidCraft 0.14.0 engine; opening the result or live insertion requires
+SolidCraft 0.14.0. The macOS binary targets macOS 14 or later. Linux binaries are
+built on Ubuntu 22.04. See the README for configuration and examples.
+
+On the development machine, a 323-part board with all default details converts
+in about **7.5 seconds**, opens in **1.6 seconds**, and renders in **2.4 seconds**
+including opening time. Inner copper and editable board sketches are not included.

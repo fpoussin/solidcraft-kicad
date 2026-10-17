@@ -9,7 +9,10 @@ The following dependencies provide the implementation's main capabilities:
 | --- | --- | --- |
 | SolidCraft 0.14.0 | Native engine, B-rep geometry, headless backend, document persistence and authenticated control client | https://github.com/tangency-labs/solidcraft |
 | KiUtils | Read-only KiCad typed metadata and S-expression parsing | https://github.com/Milind220/kiutils-rs |
-| KiCad CLI (external executable) | Model resolution and PCB/component STEP export | https://www.kicad.org/ |
+| KiCad CLI (external executable) | Model resolution and PCB/component GLB, STEP and SVG export | https://www.kicad.org/ |
+| usvg | Read KiCad's copper plots | https://github.com/linebender/resvg |
+| kurbo | Flatten copper plot curves | https://github.com/linebender/kurbo |
+| i_triangle / i_overlay | Copper polygon operations and triangulation | https://github.com/iShape-Rust/iTriangle |
 | clap | CLI | https://github.com/clap-rs/clap |
 | Figment | Configuration merging, provenance and relative paths | https://github.com/SergioBenitez/Figment |
 | Serde and serde_json | Structured data | https://serde.rs/ |

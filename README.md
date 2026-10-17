@@ -19,6 +19,13 @@ do not depend on temporary assets.
 
 ## Requirements and installation
 
+Download a prebuilt archive from [GitHub Releases](https://github.com/fpoussin/solidcraft-kicad/releases)
+for Linux x64, macOS arm64 (Apple Silicon), or Windows x64. Extract it and put the
+executable on your `PATH`. Releases include `SHA256SUMS` for archive verification.
+The macOS binary targets macOS 14 or later; Linux binaries are built on Ubuntu 22.04.
+
+To build from source:
+
 - Rust 1.95 or later, Cargo, and a C compiler for upstream native dependencies.
 - KiCad 10's `kicad-cli` on `PATH`, its model libraries, and your usual KiCad path
   configuration.
@@ -299,6 +306,29 @@ development machine, excluding application startup.
 
 No KiCad source files are rewritten. KiCad itself can create local `.kicad_prl`
 preferences when loading a project that has none.
+
+## Releases
+
+CI runs formatting, Clippy, and release-packaging checks, then tests and builds
+native binaries for Linux x64, macOS arm64 and Windows x64. Each build is available
+as a workflow artifact.
+
+To publish a release, update `Cargo.toml`, `Cargo.lock` and the corresponding
+section in [CHANGELOG.md](CHANGELOG.md), commit with a signature, and push the
+branch. After CI passes, create and push a signed `vVERSION` tag matching the
+package version. For example:
+
+```sh
+git tag -s v0.1.0 -m 'solidcraft-kicad v0.1.0'
+git push origin v0.1.0
+```
+
+The tag runs the complete CI workflow. Once every platform and check passes, CI
+packages the binaries with documentation, licenses, the README image and build
+provenance, generates `SHA256SUMS`, and publishes all three archives together to
+GitHub Releases. Publishing uses the workflow's GitHub token; no personal token
+or local release builds are required. A failed draft upload can be retried; an
+already published release is never overwritten.
 
 ## Dependencies and license
 

@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""Package native CI binaries and prepare complete, checksummed GitHub releases."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import tarfile
+import tempfile
+import zipfile
+
+ROOT = Path(__file__).resolve().parent.parent
+OUTPUT = ROOT / "artifacts" / "release"
+TARGETS = (
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+)
+
+
+def version():
+    package = (ROOT / "Cargo.toml").read_text().split("[package]", 1)[1].split("\n[", 1)[0]
+    match = re.search(r'^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"\s*$', package, re.MULTILINE)
+    if not match:
+        raise ValueError("Cargo.toml must declare a stable semantic version")
+    return match[1]
+
+
+def validate_tag(tag):
+    expected = f"v{version()}"
+    if tag != expected:
+        raise ValueError(f"tag {tag!r} must match Cargo.toml version {expected!r}")
+
+
+def package(target):
+    if os.environ.get("GITHUB_REF_TYPE") == "tag":
+        validate_tag(os.environ["GITHUB_REF_NAME"])
+    executable = "solidcraft-kicad" + (".exe" if target.endswith("windows-msvc") else "")
+    binary = ROOT / "target" / target / "release" / executable
+    actual = subprocess.check_output([str(binary), "--version"], text=True).strip()
+    if actual != f"solidcraft-kicad {version()}":
+        raise ValueError(f"unexpected binary version: {actual}")
+    subprocess.run([str(binary), "build", "--help"], check=True, stdout=subprocess.DEVNULL)
+    image = ROOT / "docs" / "images" / "pcb-assembly.png"
+    if not image.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("README image must be checked out from Git LFS")
+    name = f"solidcraft-kicad-v{version()}-{target}"
+    OUTPUT.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as temporary:
+        info = Path(temporary) / "BUILD-INFO.json"
+        info.write_text(json.dumps({
+            "version": version(), "target": target,
+            "commit": os.environ.get("GITHUB_SHA") or subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
+        }, indent=2) + "\n")
+        files = [(binary, executable), (info, info.name)]
+        files += [(ROOT / path, path) for path in (
+            "README.md", "CHANGELOG.md", "LICENSE-MIT", "LICENSE-APACHE",
+            "ATTRIBUTION.md", "Cargo.lock", "docs/images/pcb-assembly.png",
+        )]
+        if target.endswith("windows-msvc"):
+            archive = OUTPUT / f"{name}.zip"
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
+                for source, relative in files:
+                    output.write(source, f"{name}/{relative}")
+        else:
+            archive = OUTPUT / f"{name}.tar.gz"
+            with tarfile.open(archive, "w:gz") as output:
+                for source, relative in files:
+                    output.add(source, arcname=f"{name}/{relative}")
+    print(archive)
+
+
+def prepare(tag):
+    validate_tag(tag)
+    expected = {
+        f"solidcraft-kicad-{tag}-{target}.{'zip' if target.endswith('windows-msvc') else 'tar.gz'}"
+        for target in TARGETS
+    }
+    actual = {p.name for p in OUTPUT.iterdir() if p.name.endswith((".zip", ".tar.gz"))}
+    if actual != expected:
+        raise ValueError(f"release archives do not match: expected {expected}, found {actual}")
+    checksums = []
+    for name in sorted(expected):
+        path = OUTPUT / name
+        if path.stat().st_size == 0:
+            raise ValueError(f"empty release archive: {name}")
+        checksums.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {name}\n")
+    (OUTPUT / "SHA256SUMS").write_text("".join(checksums))
+    changelog = (ROOT / "CHANGELOG.md").read_text()
+    marker = f"## {version()}\n"
+    if marker not in changelog:
+        raise ValueError(f"missing changelog entry for {version()}")
+    notes = changelog.split(marker, 1)[1].split("\n## ", 1)[0].strip()
+    (OUTPUT / "notes.md").write_text(notes + "\n")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("validate-tag").add_argument("tag")
+    commands.add_parser("package").add_argument("target", choices=TARGETS)
+    commands.add_parser("prepare").add_argument("tag")
+    args = parser.parse_args()
+    if args.command == "validate-tag":
+        validate_tag(args.tag)
+    elif args.command == "package":
+        package(args.target)
+    else:
+        prepare(args.tag)
+
+
+if __name__ == "__main__":
+    main()
