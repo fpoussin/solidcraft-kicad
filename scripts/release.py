@@ -111,7 +111,8 @@ def package(target):
         )]
         if target.endswith("windows-msvc"):
             archive = OUTPUT / f"{name}.zip"
-            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as output:
+            with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED,
+                                 strict_timestamps=False) as output:
                 for source, relative in files:
                     output.write(source, f"{name}/{relative}")
         else:

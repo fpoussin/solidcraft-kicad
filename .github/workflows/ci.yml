@@ -58,9 +58,9 @@ jobs:
             rustflags: ''
             shell: bash
           # Standard GitHub-hosted runners remain free for this public repository.
-          - runner: windows-2025
+          - runner: windows-2022
             target: x86_64-pc-windows-msvc
-            rustflags: '-C target-feature=+crt-static -C linker=rust-lld -C linker-flavor=lld-link'
+            rustflags: '-C target-feature=+crt-static'
             shell: pwsh
     defaults:
       run:
@@ -79,14 +79,11 @@ jobs:
           rustup toolchain install stable --profile minimal
           rustup default stable
           rustup target add "${{ matrix.target }}"
-      - name: Configure Windows SDK for LLVM linker
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
-        with:
-          arch: x64
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ${{ matrix.target }}
+          # A packaging failure should not discard successful compilation.
+          cache-on-failure: true
       - name: Test
         # Share optimized dependencies with the shipped binary instead of also
         # compiling the entire CAD engine in the debug profile.

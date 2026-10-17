@@ -33,6 +33,9 @@ class ReleaseTests(unittest.TestCase):
         self.dependency = self.root / "dependency"
         self.dependency.mkdir()
         (self.dependency / "LICENSE-MIT").write_text("Dependency permission notice")
+        # Cargo registry archives commonly normalize their files to the Unix
+        # epoch, which predates the ZIP format's supported timestamp range.
+        os.utime(self.dependency / "LICENSE-MIT", (1, 1))
         for target in release.TARGETS:
             name = "solidcraft-kicad.exe" if target.endswith("windows-msvc") else "solidcraft-kicad"
             binary = self.root / "target" / target / "release" / name
@@ -61,6 +64,8 @@ class ReleaseTests(unittest.TestCase):
                     names = archive.namelist()
                     info = json.loads(archive.read(f"{base}/BUILD-INFO.json"))
                     self.assertEqual(archive.read(f"{base}/solidcraft-kicad.exe"), b"native binary fixture")
+                    self.assertEqual(archive.getinfo(
+                        f"{base}/THIRD-PARTY-LICENSES/example-1.0.0/LICENSE-MIT").date_time[:3], (1980, 1, 1))
             else:
                 with tarfile.open(release.OUTPUT / f"{base}.tar.gz") as archive:
                     names = archive.getnames()
