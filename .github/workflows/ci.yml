@@ -1,14 +1,21 @@
-name: CI and release
+name: CI
 
 on:
   push:
-    tags: ['v*']
+    branches: [master]
+  pull_request:
+  workflow_call:
+    inputs:
+      release:
+        description: Build and package release binaries after testing
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -31,7 +38,7 @@ jobs:
         with:
           key: checks
       - name: Validate release tag
-        if: startsWith(github.ref, 'refs/tags/')
+        if: inputs.release
         run: python3 scripts/release.py validate-tag "$GITHUB_REF_NAME"
       - run: cargo fmt --check
       - name: Test release packaging
@@ -39,7 +46,7 @@ jobs:
       - run: cargo clippy --locked --all-targets -- -D warnings
 
   build:
-    name: Build ${{ matrix.target }}
+    name: Test ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
@@ -69,7 +76,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          lfs: true
+          lfs: ${{ inputs.release || false }}
           persist-credentials: false
       - name: Install Rust
         run: |
@@ -86,10 +93,14 @@ jobs:
         # compiling the entire CAD engine in the debug profile.
         run: cargo test --locked --release --target "${{ matrix.target }}" --timings
       - name: Build release binary
+        if: inputs.release
         run: cargo build --locked --release --target "${{ matrix.target }}" --bin solidcraft-kicad --timings
       - name: Package and smoke-test binary
+        if: inputs.release
         run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/release.py package "${{ matrix.target }}"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      - name: Upload release archive
+        if: inputs.release
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binaries-${{ matrix.target }}
           path: artifacts/release/*
@@ -104,35 +115,3 @@ jobs:
           path: target/cargo-timings/*.html
           if-no-files-found: ignore
           retention-days: 14
-
-  publish:
-    name: Publish GitHub release
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [checks, build]
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: binaries-*
-          path: artifacts/release
-          merge-multiple: true
-      - name: Verify assets and prepare release notes
-        run: python3 scripts/release.py prepare "$GITHUB_REF_NAME"
-      - name: Publish all platforms together
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "$GITHUB_REF_NAME" --json isDraft > artifacts/release/existing.json; then
-            python3 -c 'import json; assert json.load(open("artifacts/release/existing.json"))["isDraft"], "Release already published"'
-            gh release upload "$GITHUB_REF_NAME" artifacts/release/*.tar.gz artifacts/release/*.zip artifacts/release/SHA256SUMS --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" artifacts/release/*.tar.gz artifacts/release/*.zip artifacts/release/SHA256SUMS \
-              --verify-tag --draft --title "$GITHUB_REF_NAME" --notes-file artifacts/release/notes.md
-          fi
-          gh release edit "$GITHUB_REF_NAME" --draft=false --latest --notes-file artifacts/release/notes.md
