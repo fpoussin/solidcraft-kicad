@@ -49,7 +49,10 @@ solidcraft-kicad build path/to/board.kicad_pcb --force
 
 The existing file is replaced atomically after a successful conversion.
 Successful builds and insertions show a progress bar only when stderr is an
-interactive terminal. Redirected output stays quiet; warnings and errors go to
+interactive terminal. Builds report each enabled copper, silkscreen and soldermask
+side, pads/plating, the substrate and component models as their exports finish.
+The step count adjusts to omitted layers; exports remain concurrent.
+Redirected output stays quiet; warnings and errors go to
 stderr. Add `--json` to print a report to stdout with source hash, exported
 references, prefix overrides and omissions:
 

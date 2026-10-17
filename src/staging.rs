@@ -68,6 +68,19 @@ impl Default for BoardLayers {
     }
 }
 
+impl BoardLayers {
+    /// Read, component models, substrate, board surfaces, assembly preparation, write;
+    /// plus each enabled surface layer. Batched exports report their layers together.
+    pub fn progress_steps(self) -> usize {
+        6 + usize::from(self.silkscreen) * 2
+            + usize::from(self.soldermask) * 2
+            + usize::from(self.pads)
+            + usize::from(self.copper) * 2
+    }
+}
+
+type Completed<'a> = &'a (dyn Fn(&'static str) + Sync);
+
 enum ExportKind<'a> {
     Models,
     Board(BoardLayers),
@@ -181,7 +194,12 @@ impl Exporter<'_> {
         Ok((step, log, success))
     }
 
-    fn export_copper(&self, input: &Inventory, directory: &Path) -> Result<[PathBuf; 2]> {
+    fn export_copper(
+        &self,
+        input: &Inventory,
+        directory: &Path,
+        completed: Completed<'_>,
+    ) -> Result<[PathBuf; 2]> {
         let paths = [directory.join("front.svg"), directory.join("back.svg")];
         for (layer, path) in ["F.Cu", "B.Cu"].into_iter().zip(&paths) {
             // Plotting preserves filled zones and drills without reconstructing copper solids.
@@ -225,12 +243,17 @@ impl Exporter<'_> {
                     log.trim()
                 )));
             }
+            completed(if layer == "F.Cu" {
+                "Front copper plotted"
+            } else {
+                "Back copper plotted"
+            });
         }
         Ok(paths)
     }
 
     pub fn stage(&self, inventory: Inventory, allow_missing: bool) -> Result<Staged> {
-        self.stage_impl(inventory, allow_missing, None)
+        self.stage_impl(inventory, allow_missing, None, &|_| {})
     }
 
     pub fn stage_build(&self, inventory: Inventory, allow_missing: bool) -> Result<Staged> {
@@ -243,7 +266,17 @@ impl Exporter<'_> {
         allow_missing: bool,
         layers: BoardLayers,
     ) -> Result<Staged> {
-        self.stage_impl(inventory, allow_missing, Some(layers))
+        self.stage_build_with_progress(inventory, allow_missing, layers, &|_| {})
+    }
+
+    pub fn stage_build_with_progress(
+        &self,
+        inventory: Inventory,
+        allow_missing: bool,
+        layers: BoardLayers,
+        completed: Completed<'_>,
+    ) -> Result<Staged> {
+        self.stage_impl(inventory, allow_missing, Some(layers), completed)
     }
 
     fn stage_impl(
@@ -251,6 +284,7 @@ impl Exporter<'_> {
         inventory: Inventory,
         allow_missing: bool,
         layers: Option<BoardLayers>,
+        completed: Completed<'_>,
     ) -> Result<Staged> {
         let dir = tempfile::Builder::new()
             .prefix("solidcraft-kicad-")
@@ -292,24 +326,43 @@ impl Exporter<'_> {
         if let Some(layers) = layers {
             // These jobs are independent; keep board face construction off the model path.
             let (models, board, substrate, copper) = std::thread::scope(|scope| {
-                let copper = layers
-                    .copper
-                    .then(|| scope.spawn(|| self.export_copper(&stage.inventory, &directory)));
+                let copper = layers.copper.then(|| {
+                    scope.spawn(|| self.export_copper(&stage.inventory, &directory, completed))
+                });
                 let board = scope.spawn(|| {
-                    self.export(
+                    let result = self.export(
                         &stage.inventory,
                         &directory,
                         "board",
                         ExportKind::Board(layers),
-                    )
+                    )?;
+                    if result.2 {
+                        completed("PCB surfaces exported");
+                        if layers.silkscreen {
+                            completed("Front silkscreen exported");
+                            completed("Back silkscreen exported");
+                        }
+                        if layers.soldermask {
+                            completed("Front soldermask exported");
+                            completed("Back soldermask exported");
+                        }
+                        if layers.pads {
+                            completed("Pads and plating exported");
+                        }
+                    }
+                    Ok::<_, Error>(result)
                 });
                 let substrate = scope.spawn(|| {
-                    self.export(
+                    let result = self.export(
                         &stage.inventory,
                         &directory,
                         "substrate",
                         ExportKind::Step(None),
-                    )
+                    )?;
+                    if result.2 {
+                        completed("CAD substrate exported");
+                    }
+                    Ok::<_, Error>(result)
                 });
                 let models = if stage
                     .inventory
@@ -322,6 +375,12 @@ impl Exporter<'_> {
                 } else {
                     Ok(None)
                 };
+                if models
+                    .as_ref()
+                    .is_ok_and(|m| m.as_ref().is_none_or(|m| m.2))
+                {
+                    completed("Component models exported");
+                }
                 let board = board
                     .join()
                     .map_err(|_| Error::message("board export thread failed"))?;
@@ -375,6 +434,7 @@ impl Exporter<'_> {
                 allow_missing,
                 copper.as_ref(),
             )?;
+            completed("Linked assembly and layer meshes prepared");
             stage.omissions.extend(omissions);
             stage.assets = parts
                 .into_iter()

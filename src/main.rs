@@ -144,7 +144,11 @@ fn run(cli: Cli) -> Result<Value> {
         }
         overwrite = confirm_overwrite(output, force)?;
     }
-    let progress = Progress::new();
+    let progress = Progress::with_total(if output.is_some() {
+        layers.progress_steps()
+    } else {
+        3
+    });
     progress.stage(0, "Reading PCB");
     let inventory = inventory::read(&input.board)?;
     let settings = config::load(
@@ -168,17 +172,22 @@ fn run(cli: Cli) -> Result<Value> {
         settings: &settings,
     };
     let allow_missing = input.allow_missing_models || !input.strict_models;
-    progress.stage(1, "Exporting and preparing components");
+    progress.advance("PCB read");
+    progress.label("Exporting layers and component models");
     let mut stage = if output.is_some() {
-        exporter.stage_build_with_layers(inventory, allow_missing, layers)?
+        exporter.stage_build_with_progress(inventory, allow_missing, layers, &|label| {
+            progress.advance(label)
+        })?
     } else {
-        exporter.stage(inventory, allow_missing)?
+        let stage = exporter.stage(inventory, allow_missing)?;
+        progress.advance("Components exported");
+        stage
     };
     let result = if let Some(output) = output {
-        progress.stage(2, "Writing SolidCraft file");
+        progress.label("Writing SolidCraft file");
         cad::build_with_options(&stage, &output, measure, overwrite)?
     } else {
-        progress.stage(2, "Inserting components");
+        progress.label("Inserting components");
         let b = remote
             .as_mut()
             .ok_or_else(|| Error::message("missing SolidCraft connection"))?;
@@ -188,7 +197,7 @@ fn run(cli: Cli) -> Result<Value> {
             &mut stage,
         )?
     };
-    progress.stage(3, "Complete");
+    progress.advance("Complete");
     drop(progress);
     for warning in stage.warnings.iter().chain(&stage.omissions) {
         eprintln!("Warning: {warning}");

@@ -7,6 +7,8 @@ use std::{
 
 enum Event {
     Stage(usize, &'static str),
+    Advance(&'static str),
+    Label(&'static str),
     Stop,
 }
 
@@ -23,6 +25,11 @@ impl Default for Progress {
 
 impl Progress {
     pub fn new() -> Self {
+        Self::with_total(3)
+    }
+
+    pub fn with_total(total: usize) -> Self {
+        let total = total.max(1);
         if !std::io::stderr().is_terminal() || std::env::var("TERM").is_ok_and(|s| s == "dumb") {
             return Self { worker: None };
         }
@@ -34,18 +41,23 @@ impl Progress {
                 loop {
                     match receiver.recv_timeout(Duration::from_millis(100)) {
                         Ok(Event::Stage(next, text)) => {
-                            stage = next;
+                            stage = next.min(total);
                             label = text;
                         }
+                        Ok(Event::Advance(text)) => {
+                            stage = (stage + 1).min(total);
+                            label = text;
+                        }
+                        Ok(Event::Label(text)) => label = text,
                         Ok(Event::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
                         Err(mpsc::RecvTimeoutError::Timeout) => {}
                     }
                     let mut stderr = std::io::stderr().lock();
-                    let filled = stage.min(3) * 6;
+                    let filled = stage * 18 / total;
                     let spinner = ['|', '/', '-', '\\'][tick % 4];
                     let _ = write!(
                         stderr,
-                        "\r\x1b[2K[{:<18}] {stage}/3 {spinner} {label}",
+                        "\r\x1b[2K[{:<18}] {stage}/{total} {spinner} {label}",
                         "=".repeat(filled)
                     );
                     let _ = stderr.flush();
@@ -64,6 +76,18 @@ impl Progress {
     pub fn stage(&self, stage: usize, label: &'static str) {
         if let Some((sender, _)) = &self.worker {
             let _ = sender.send(Event::Stage(stage, label));
+        }
+    }
+
+    pub fn advance(&self, label: &'static str) {
+        if let Some((sender, _)) = &self.worker {
+            let _ = sender.send(Event::Advance(label));
+        }
+    }
+
+    pub fn label(&self, label: &'static str) {
+        if let Some((sender, _)) = &self.worker {
+            let _ = sender.send(Event::Label(label));
         }
     }
 }

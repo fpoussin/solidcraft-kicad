@@ -7,7 +7,7 @@ use solidcraft_kicad::{
     config::Settings,
     error::{Error, Result},
     inventory,
-    staging::{Exporter, Staged},
+    staging::{BoardLayers, Exporter, Staged},
 };
 use solidcraft_mcp::{Backend, Headless};
 
@@ -553,6 +553,70 @@ fn board_builds_without_any_usable_component_models() -> Result<()> {
             .count(),
         1
     );
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn progress_reports_each_enabled_layer_once_across_concurrent_exports() -> Result<()> {
+    let (dir, _stage) = fixture(false)?;
+    let settings = Settings::default();
+    let program = dir.path().join("fake-kicad");
+    let exporter = Exporter {
+        program: &program,
+        settings: &settings,
+        timeout: Duration::from_secs(5),
+    };
+    for layers in [
+        BoardLayers::default(),
+        BoardLayers {
+            silkscreen: false,
+            soldermask: false,
+            pads: false,
+            copper: false,
+        },
+    ] {
+        let events = std::sync::Mutex::new(Vec::new());
+        exporter.stage_build_with_progress(
+            inventory::read(&dir.path().join("board.txt"))?,
+            false,
+            layers,
+            &|label| {
+                if let Ok(mut events) = events.lock() {
+                    events.push(label);
+                }
+            },
+        )?;
+        let events = events
+            .into_inner()
+            .map_err(|_| Error::message("progress callback failed"))?;
+        assert_eq!(
+            events.len() + 2,
+            layers.progress_steps(),
+            "read/write are reported by the CLI"
+        );
+        let unique: std::collections::BTreeSet<_> = events.iter().copied().collect();
+        assert_eq!(
+            unique.len(),
+            events.len(),
+            "duplicate completion from parallel jobs"
+        );
+        for label in [
+            "Front silkscreen exported",
+            "Back silkscreen exported",
+            "Front soldermask exported",
+            "Back soldermask exported",
+            "Pads and plating exported",
+            "Front copper plotted",
+            "Back copper plotted",
+        ] {
+            assert_eq!(unique.contains(label), layers.copper);
+        }
+        assert_eq!(
+            events.last(),
+            Some(&"Linked assembly and layer meshes prepared")
+        );
+    }
     Ok(())
 }
 
