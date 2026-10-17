@@ -327,8 +327,8 @@ branch. After CI passes, create and push a signed `vVERSION` tag matching the
 package version. For example:
 
 ```sh
-git tag -s v0.1.0 -m 'solidcraft-kicad v0.1.0'
-git push origin v0.1.0
+git tag -s v0.1.1 -m 'solidcraft-kicad v0.1.1'
+git push origin v0.1.1
 ```
 
 The tag runs the complete CI workflow. Once every platform and check passes, CI

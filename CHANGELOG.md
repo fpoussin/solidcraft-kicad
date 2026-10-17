@@ -1,10 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.1.1
 
 - Release builds notify interactive users about newer stable GitHub releases,
   using a daily background check. Offline failures are silent; debug builds,
   JSON output, and redirected stderr skip checking. `--no-update-check` opts out.
+- No message is printed when already up to date.
 
 ## 0.1.0
 
