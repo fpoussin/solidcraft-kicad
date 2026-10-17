@@ -4,6 +4,10 @@ Import a KiCad PCB as a native SolidCraft component assembly, or insert it direc
 into an open assembly. Rust orchestration reuses KiCad's model resolver/exporter,
 KiUtils, and SolidCraft's own engine, document writer, and control client.
 
+![A KiCad PCB imported into SolidCraft, with copper traces, silkscreen, plated pads and coloured component models](docs/images/pcb-assembly.png)
+
+*A native SolidCraft assembly with outer copper, silkscreen, plated pads and matching soldermask colours.*
+
 The result is a PCB parent component with a substrate child and a child per
 populated footprint with visible assigned models. Builds use coloured triangle
 meshes for component models and board coatings so even large boards open quickly.
