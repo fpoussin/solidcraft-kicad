@@ -47,22 +47,40 @@ solidcraft-kicad build path/to/board.kicad_pcb --force
 The existing file is replaced atomically after a successful conversion.
 Successful builds and insertions show a progress bar only when stderr is an
 interactive terminal. Redirected output stays quiet; warnings and errors go to
-stderr. Add `--json` to print a
-report to stdout with source hash, exported references, prefix overrides and
-omissions:
+stderr. Add `--json` to print a report to stdout with source hash, exported
+references, prefix overrides and omissions:
 
 ```sh
 solidcraft-kicad build path/to/board.kicad_pcb --json
 ```
 
-Builds export the complete assembly once as a binary glTF (GLB). The writer
-preserves placements and material colours, converts metres/Y-up to KiCad's
-millimetres/Z-up, and groups all model meshes under their footprint references.
-Identical geometry with matching colours is stored once, with a named occurrence
-for each footprint. Each occurrence retains its own placement and visibility;
-different colours remain separate definitions. Native mesh geometry avoids STEP
-reconstruction and surface tessellation both during conversion and when
-SolidCraft opens the file.
+Builds include front and back silkscreen, soldermask with its openings, pads and
+plated holes by default. Soldermask and silkscreen colours come from the PCB's
+physical stackup, including separate colours for each side. Pad and hole plating
+uses the stackup's surface finish: gold for ENIG/ENEPIG and gold finishes, tin for
+HASL/HAL and tin/nickel finishes, silver for silver finishes, and copper for OSP.
+Unspecified or unrecognised finishes retain KiCad's exported pad colour.
+Metallic response and roughness are saved with the geometry. Thin board coatings
+are rendered opaque for clear silkscreen and predictable colours; component
+materials retain their exported opacity.
+A 0.1 mm outward silkscreen display offset keeps lettering visible in
+SolidCraft 0.14's viewport.
+
+Omit individual details when desired:
+
+```sh
+solidcraft-kicad build board.kicad_pcb --no-silkscreen
+solidcraft-kicad build board.kicad_pcb --no-pads --no-soldermask
+```
+
+The board layers and component models are exported concurrently as binary glTF
+(GLB). Faces sharing a material are batched, and exact duplicate board vertices
+are stored once. The writer preserves placements, converts metres/Y-up to KiCad's
+millimetres/Z-up, and groups model meshes under their footprint references.
+Identical geometry with matching colour and material response is stored once,
+with a named occurrence for each footprint. Each occurrence retains its own
+placement and visibility. Native mesh geometry avoids STEP reconstruction and
+surface tessellation both during conversion and when SolidCraft opens the file.
 
 `--json --measure` also includes mesh dimensions, volume and area in the report.
 These measurements describe the exported triangles; builds are intended for
@@ -187,12 +205,12 @@ are excluded. Live insertion validates imported solids during staging; offline
 builds preserve KiCad's coloured meshes. `--measure` adds mesh measurements.
 Use `--json` to review omissions before relying on an assembly for fit checks.
 
-The fast export omits copper, pads, tracks and solder-mask geometry, so the
-exported substrate can be thinner than the board's nominal stack-up. Component
-placement follows KiCad's export, including its stack-up offsets. Native mesh
-components support visual fit checks, placement
-and visibility; editable board sketches, synchronization and ECAD
-write-back are deferred. The current input limits are 64 MiB and 1000 footprints.
+Tracks, zones and inner copper are omitted. The substrate mesh represents the
+dielectric body and can be thinner than the board's nominal total stack-up.
+Board surfaces and component placement follow KiCad's stack-up offsets. Native
+mesh components support visual fit checks, placement and visibility; editable
+board sketches, synchronization and ECAD write-back are deferred. The current
+input limits are 64 MiB and 1000 footprints.
 
 The application owns source-path/hash/reference provenance under the native
 metadata key `org.solidcraft-kicad.imports`. It leaves other metadata intact.
@@ -206,9 +224,10 @@ cargo test --locked
 ```
 
 Normal tests need no KiCad installation or GUI: an analytic solid and a fake
-exporter exercise one-export assembly construction, colours, persistence,
-individual visibility and movement, collisions in names, rollback, destination
-changes, missing-model policy and lost replies.
+exporter exercise concurrent board/model exports, both-side layer colours,
+surface finishes, metallic appearances, vertex sharing, persistence, individual
+visibility and movement, collisions in names, rollback, destination changes,
+missing-model policy and lost replies.
 Board-specific acceptance tests are ignored by default because their source
 boards and model libraries are not bundled. See [tests/assembly.rs](tests/assembly.rs)
 for their required environment variables and expected geometry.
@@ -240,13 +259,14 @@ python3 scripts/validate-desktop.py --app /path/to/SolidCraft.AppImage \
   --native /path/to/board.solidcraft --max-open-seconds 3
 ```
 
-A development benchmark with 323 placed parts converted in **5.17 s**;
-SolidCraft 0.14.0 opened the result in **0.45 s**, with its first render ready in
-**0.70 s** in the isolated
-desktop. The placed parts, including the substrate, share 42 geometry
-definitions. Sharing reduced the file from 9.2 MB to **5.3 MB**.
-One unavailable model was reported as an omission. These are measured wall
-times on the development machine, excluding application startup.
+A development benchmark with 323 placed parts and all default board details
+converted in **6.82 s**. SolidCraft 0.14.0 opened the result in **0.94 s**, with
+its first render ready in **1.31 s** in the isolated desktop. The placed parts,
+including the board, share 42 geometry definitions. All board layers together
+use six mesh bodies; the native file occupies **14.1 MB**. Exact vertex sharing
+reduced that from 17.1 MB without changing the rendered image. One unavailable
+model was reported as an omission. These are measured wall times on the
+development machine, excluding application startup.
 
 No KiCad source files are rewritten. KiCad itself can create local `.kicad_prl`
 preferences when loading a project that has none.

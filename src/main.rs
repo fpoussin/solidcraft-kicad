@@ -12,7 +12,7 @@ use solidcraft_kicad::{
     error::{Error, Result},
     inventory,
     progress::Progress,
-    staging::Exporter,
+    staging::{BoardLayers, Exporter},
 };
 use solidcraft_mcp::Remote;
 
@@ -44,6 +44,8 @@ enum Action {
         /// Overwrite an existing output file without prompting.
         #[arg(short, long)]
         force: bool,
+        #[command(flatten)]
+        layers: LayerOptions,
     },
     /// Insert into the active running SolidCraft assembly, without saving it.
     Insert {
@@ -52,6 +54,19 @@ enum Action {
         #[arg(long, default_value_t = 7878, value_parser = clap::value_parser!(u16).range(1..))]
         port: u16,
     },
+}
+
+#[derive(Args)]
+struct LayerOptions {
+    /// Omit front and back silkscreen (included by default).
+    #[arg(long)]
+    no_silkscreen: bool,
+    /// Omit soldermask surfaces and openings (included by default).
+    #[arg(long)]
+    no_soldermask: bool,
+    /// Omit pads and plated holes (included by default).
+    #[arg(long)]
+    no_pads: bool,
 }
 
 #[derive(Args)]
@@ -83,11 +98,12 @@ struct Input {
 
 fn run(cli: Cli) -> Result<Value> {
     let measure = cli.measure;
-    let (input, output, port, force) = match cli.command {
+    let (input, output, port, force, layers) = match cli.command {
         Action::Build {
             input,
             output,
             force,
+            layers,
         } => {
             let output = match output {
                 Some(path) => path,
@@ -99,9 +115,19 @@ fn run(cli: Cli) -> Result<Value> {
                 )
                 .with_extension("solidcraft"),
             };
-            (input, Some(std::path::absolute(output)?), None, force)
+            (
+                input,
+                Some(std::path::absolute(output)?),
+                None,
+                force,
+                BoardLayers {
+                    silkscreen: !layers.no_silkscreen,
+                    soldermask: !layers.no_soldermask,
+                    pads: !layers.no_pads,
+                },
+            )
         }
-        Action::Insert { input, port } => (input, None, Some(port), false),
+        Action::Insert { input, port } => (input, None, Some(port), false, BoardLayers::default()),
     };
     let mut overwrite = false;
     if let Some(output) = &output {
@@ -140,7 +166,7 @@ fn run(cli: Cli) -> Result<Value> {
     let allow_missing = input.allow_missing_models || !input.strict_models;
     progress.stage(1, "Exporting and preparing components");
     let mut stage = if output.is_some() {
-        exporter.stage_build(inventory, allow_missing)?
+        exporter.stage_build_with_layers(inventory, allow_missing, layers)?
     } else {
         exporter.stage(inventory, allow_missing)?
     };

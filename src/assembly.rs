@@ -1,12 +1,15 @@
 //! Share coloured model definitions while retaining named footprint placements.
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     path::Path,
 };
 
 use sha2::{Digest, Sha256};
 use solidcraft_engine::{
-    doc::{Document, FeatureKind, IDENTITY, Mat, MeshData, apply_point, mat_inverse, mat_mul},
+    doc::{
+        Document, FeatureKind, IDENTITY, Mat, MeshData, appearance::Look, apply_point, mat_inverse,
+        mat_mul, pbr_appearance::PbrParameters,
+    },
     geom::Vec3,
     io::GltfImport,
 };
@@ -41,30 +44,92 @@ const TO_Y_UP: Mat = [
 ];
 
 struct PlacedModel {
-    meshes: Vec<MeshData>,
+    meshes: Vec<ModelMesh>,
     origin: Mat,
 }
 
+struct ModelMesh {
+    mesh: MeshData,
+    look: Option<Look>,
+}
+
 pub fn prepare(
-    path: &Path,
+    path: Option<&Path>,
+    board: &Path,
     inventory: &Inventory,
     allow_missing: bool,
 ) -> Result<(Prepared, Vec<Part>, Vec<String>)> {
-    let bytes = std::fs::read(path)?;
-    let imported = solidcraft_engine::io::read_gltf(&bytes, "assembly.glb", &mut |_| {
-        Err("external glTF buffers are not allowed in a KiCad GLB".into())
-    })
-    .map_err(|e| Error::message(e.to_string()))?;
-    if !imported.feature.warnings.is_empty() {
-        return Err(Error::message(imported.feature.warnings.join("; ")));
-    }
     let expected: BTreeSet<&str> = inventory
         .footprints
         .iter()
         .filter(|f| !f.dnp && !f.models.is_empty())
         .map(|f| f.reference.as_str())
         .collect();
-    let groups = footprint_meshes(&imported, &expected)?;
+    let mut groups = match path {
+        Some(path) => read_models(path, &expected, allow_missing, false)?,
+        None => BTreeMap::new(),
+    };
+    let mut board_groups = read_models(board, &BTreeSet::new(), false, true)?;
+    let mut substrate = board_groups
+        .remove("PCB")
+        .ok_or_else(|| Error::message("KiCad exported no board geometry"))?;
+    let low = substrate
+        .meshes
+        .iter()
+        .flat_map(|m| m.mesh.positions.iter().skip(2).step_by(3))
+        .copied()
+        .fold(f64::INFINITY, f64::min);
+    let high = substrate
+        .meshes
+        .iter()
+        .flat_map(|m| m.mesh.positions.iter().skip(2).step_by(3))
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    for item in &mut substrate.meshes {
+        // KiCad marks its silk material as a rough dielectric. Keep a small visual
+        // separation: SolidCraft 0.14's viewport otherwise hides ink behind the mask.
+        if item
+            .look
+            .as_ref()
+            .and_then(|l| l.pbr)
+            .is_some_and(|p| p.metallic() == 0.0 && (p.roughness() - 0.9).abs() < 1e-5)
+            && let Some(&z) = item.mesh.positions.get(2)
+            && item
+                .mesh
+                .positions
+                .iter()
+                .skip(2)
+                .step_by(3)
+                .all(|v| (v - z).abs() < 1e-6)
+        {
+            let offset = if z > (low + high) * 0.5 { 0.1 } else { -0.1 };
+            for z in item.mesh.positions.iter_mut().skip(2).step_by(3) {
+                *z += offset;
+            }
+        }
+        compact_vertices(&mut item.mesh)?;
+    }
+    if !board_groups.is_empty() || groups.contains_key("PCB") {
+        return Err(Error::message(
+            "unexpected geometry in split board/model export",
+        ));
+    }
+    if let Some(finish) = inventory.copper_finish.as_deref()
+        && let Some(color) = finish_color(finish)
+    {
+        for ModelMesh { mesh, look } in &mut substrate.meshes {
+            // The board-only GLB contains no component metals: its metallic material
+            // represents pads and plated holes. KiCad's exporter ignores copper_finish.
+            if let Some(look) = look
+                && look.pbr.is_some_and(|p| p.metallic() == 1.0)
+            {
+                look.name = finish.into();
+                look.color = color;
+                mesh.color = Some(look.rgb());
+            }
+        }
+    }
+    groups.insert("PCB".into(), substrate);
     let mut doc = Document::new(&inventory.name);
     let parent = doc
         .add_component(Some(&inventory.name), 0)
@@ -73,7 +138,6 @@ pub fn prepare(
     let mut parts = Vec::new();
     let mut definitions = BTreeMap::new();
     let mut omissions = Vec::new();
-    let mut groups = groups;
     for reference in std::iter::once("PCB").chain(expected.iter().copied()) {
         let model = groups.remove(reference);
         if model.as_ref().is_none_or(|m| m.meshes.is_empty()) {
@@ -118,8 +182,11 @@ pub fn prepare(
         let meshes: Vec<_> = meshes
             .into_iter()
             .enumerate()
-            .map(|(i, mut mesh)| {
+            .map(|(i, ModelMesh { mut mesh, look })| {
                 mesh.name = format!("{name}_{}", i + 1);
+                if let Some(look) = look {
+                    doc.appearances.bodies.insert(mesh.name.clone(), look);
+                }
                 mesh
             })
             .collect();
@@ -148,9 +215,123 @@ pub fn prepare(
     Ok((Prepared { doc, parent }, parts, omissions))
 }
 
-fn model_key(meshes: &[MeshData]) -> Result<[u8; 32]> {
+fn read_models(
+    path: &Path,
+    expected: &BTreeSet<&str>,
+    allow_empty: bool,
+    board: bool,
+) -> Result<BTreeMap<String, PlacedModel>> {
+    let bytes = std::fs::read(path)?;
+    let imported = solidcraft_engine::io::read_gltf(&bytes, "assembly.glb", &mut |_| {
+        Err("external glTF buffers are not allowed in a KiCad GLB".into())
+    });
+    let mut imported = match imported {
+        Ok(imported) => imported,
+        // KiCad writes an empty GLB when all assigned models are unavailable.
+        Err(error)
+            if allow_empty
+                && ["glTF has no nodes to import", "glTF has no triangle meshes"]
+                    .iter()
+                    .any(|message| error.to_string().ends_with(message)) =>
+        {
+            return Ok(BTreeMap::new());
+        }
+        Err(error) => return Err(Error::message(error.to_string())),
+    };
+    if !imported.feature.warnings.is_empty() {
+        return Err(Error::message(imported.feature.warnings.join("; ")));
+    }
+    if board {
+        opaque_coatings(&mut imported, &bytes)?;
+    }
+    footprint_meshes(&imported, expected)
+}
+
+fn opaque_coatings(imported: &mut GltfImport, bytes: &[u8]) -> Result<()> {
+    // The engine discards PBR parameters on blended materials. Recover the board
+    // coating response when making those layers opaque, preserving their RGB.
+    let json = if bytes.starts_with(b"glTF") {
+        let length = bytes
+            .get(12..16)
+            .and_then(|b| b.try_into().ok())
+            .map(u32::from_le_bytes)
+            .ok_or_else(|| Error::message("missing GLB JSON chunk"))? as usize;
+        bytes
+            .get(20..20 + length)
+            .ok_or_else(|| Error::message("truncated GLB JSON chunk"))?
+    } else {
+        bytes
+    };
+    let document: serde_json::Value = serde_json::from_slice(json)?;
+    let materials = document["materials"].as_array();
+    for look in imported.looks.iter_mut().flatten() {
+        look.opacity = 1.0;
+        if look.pbr.is_none()
+            && let Some(material) = materials.and_then(|ms| {
+                ms.iter()
+                    .find(|m| m["name"].as_str() == Some(look.name.as_str()))
+            })
+        {
+            let pbr = &material["pbrMetallicRoughness"];
+            look.pbr = PbrParameters::new(
+                pbr["metallicFactor"].as_f64().unwrap_or(1.0),
+                pbr["roughnessFactor"].as_f64().unwrap_or(1.0),
+                1.5,
+            )
+            .ok();
+        }
+    }
+    Ok(())
+}
+
+// KiCad repeats vertices at face boundaries. Share exact coordinates without
+// changing any triangles, normals, dimensions, or material boundaries.
+fn compact_vertices(mesh: &mut MeshData) -> Result<()> {
+    let mut indices = HashMap::new();
+    let mut positions = Vec::new();
+    let mut remap = Vec::with_capacity(mesh.positions.len() / 3);
+    for point in mesh.positions.as_chunks::<3>().0 {
+        let key = point.map(|v| if v == 0.0 { 0 } else { v.to_bits() });
+        let next = u32::try_from(positions.len() / 3)
+            .map_err(|_| Error::message("board mesh has too many vertices"))?;
+        let index = *indices.entry(key).or_insert_with(|| {
+            positions.extend_from_slice(point);
+            next
+        });
+        remap.push(index);
+    }
+    for index in &mut mesh.triangles {
+        *index = *remap
+            .get(*index as usize)
+            .ok_or_else(|| Error::message("invalid board mesh index"))?;
+    }
+    mesh.positions = positions;
+    Ok(())
+}
+
+// KiCad 10's 3D viewer finish palette (BOARD_ADAPTER::GetLayerColors).
+fn finish_color(finish: &str) -> Option<[u8; 3]> {
+    let finish = finish.trim().to_ascii_lowercase();
+    if finish.ends_with("osp") {
+        Some([184, 115, 50])
+    } else if finish.ends_with("ig") || finish.ends_with("gold") {
+        Some([178, 156, 0])
+    } else if finish.starts_with("hal")
+        || finish.starts_with("hasl")
+        || finish.ends_with("tin")
+        || finish.ends_with("nickel")
+    {
+        Some([160, 160, 160])
+    } else if finish.ends_with("silver") {
+        Some([213, 213, 213])
+    } else {
+        None
+    }
+}
+
+fn model_key(meshes: &[ModelMesh]) -> Result<[u8; 32]> {
     let mut pieces = Vec::with_capacity(meshes.len());
-    for mesh in meshes {
+    for ModelMesh { mesh, look } in meshes {
         let mut hash = Sha256::new();
         hash.update((mesh.positions.len() as u64).to_le_bytes());
         for &coordinate in &mesh.positions {
@@ -170,6 +351,12 @@ fn model_key(meshes: &[MeshData]) -> Result<[u8; 32]> {
                 hash.update(channel.to_bits().to_le_bytes());
             }
         }
+        // Material labels vary between export nodes; physical appearance must match.
+        hash.update(serde_json::to_vec(
+            &look
+                .as_ref()
+                .map(|look| (look.color, look.opacity, look.pbr)),
+        )?);
         pieces.push(<[u8; 32]>::from(hash.finalize()));
     }
     pieces.sort_unstable();
@@ -255,7 +442,10 @@ impl Walker<'_> {
                     // The reader scales metres to mm; rotate glTF Y-up to KiCad Z-up.
                     *p = [q.x, -q.z, q.y];
                 }
-                destination.meshes.push(mesh);
+                destination.meshes.push(ModelMesh {
+                    mesh,
+                    look: self.imported.looks.get(i).cloned().flatten(),
+                });
             }
         }
         for i in self.children.get(&slot).cloned().unwrap_or_default() {

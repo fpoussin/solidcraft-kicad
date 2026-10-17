@@ -13,6 +13,12 @@ use solidcraft_mcp::{Backend, Headless};
 
 #[cfg(unix)]
 fn write_mesh_fixture(path: &Path, missing: bool, shared: bool) -> Result<()> {
+    let (document, bin) = mesh_fixture(missing, shared);
+    write_gltf(path, &document, &bin)
+}
+
+#[cfg(unix)]
+fn mesh_fixture(missing: bool, shared: bool) -> (Value, Vec<u8>) {
     let positions: [[f32; 3]; 8] = [
         [0., 0., 0.],
         [0.002, 0., 0.],
@@ -34,11 +40,7 @@ fn write_mesh_fixture(path: &Path, missing: bool, shared: bool) -> Result<()> {
     for value in indices {
         bin.extend(value.to_le_bytes());
     }
-    let children = if missing {
-        json!([1, 2])
-    } else {
-        json!([1, 2, 3])
-    };
+    let children = if missing { json!([2]) } else { json!([2, 3]) };
     let mut document = json!({
         "asset":{"version":"2.0"}, "scene":0, "scenes":[{"nodes":[0]}],
         "nodes":[{"children":children},{"name":"PCB","mesh":0},{"name":"R1","mesh":1,"translation":[0.01,0,-0.02]},{"name":"U1","children":[4]},{"name":"model","mesh":2}],
@@ -58,9 +60,14 @@ fn write_mesh_fixture(path: &Path, missing: bool, shared: bool) -> Result<()> {
         ]);
         document["nodes"][3]["translation"] = json!([-0.005, 0.007, 0.011]);
     }
+    (document, bin)
+}
+
+#[cfg(unix)]
+fn write_gltf(path: &Path, document: &Value, bin: &[u8]) -> Result<()> {
     std::fs::write(
         path,
-        solidcraft_engine::io::glb_container(&serde_json::to_vec(&document)?, &bin),
+        solidcraft_engine::io::glb_container(&serde_json::to_vec(document)?, bin),
     )?;
     Ok(())
 }
@@ -91,6 +98,9 @@ fn fixture(missing: bool) -> Result<(tempfile::TempDir, Staged)> {
     let script = dir.path().join("fake-kicad");
     write_mesh_fixture(&dir.path().join("batch.glb"), false, false)?;
     write_mesh_fixture(&dir.path().join("batch-missing.glb"), true, false)?;
+    let (mut board, bin) = mesh_fixture(false, false);
+    board["nodes"][0]["children"] = json!([1]);
+    write_gltf(&dir.path().join("board.glb"), &board, &bin)?;
     std::fs::write(
         &script,
         r##"#!/bin/sh
@@ -105,6 +115,10 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+if [ "$format" = glb ] && [ -n "$board_only" ]; then
+  cp "$(dirname "$0")/board.glb" "$output"
+  exit 0
+fi
 if [ -z "$reference" ] && [ -z "$board_only" ]; then
   if [ -e "$(dirname "$0")/missing" ]; then
     printf 'Could not add 3D model for U1.\nFile not found: ${TEST_MODELS}/one.step\n'
@@ -244,6 +258,273 @@ fn identical_models_share_geometry_but_keep_independent_placements() -> Result<(
 
 #[test]
 #[cfg(unix)]
+fn board_layers_retain_both_side_colors_finish_and_batched_geometry() -> Result<()> {
+    let (dir, _stage) = fixture(false)?;
+    let (mut board, mut bin) = mesh_fixture(false, false);
+    board["nodes"] = json!([{"children":[1,2,3,4,5,6]},
+        {"name":"PCB", "mesh":0},
+        {"name":"=>[Pads]", "mesh":1},
+        {"name":"=>[Top Soldermask]", "mesh":2},
+        {"name":"=>[Bottom Soldermask]", "mesh":3},
+        {"name":"=>[Top Silkscreen]", "mesh":4},
+        {"name":"=>[Bottom Silkscreen]", "mesh":5}]);
+    board["materials"] = json!([
+        {"pbrMetallicRoughness":{"baseColorFactor":[0.,0.5,0.,1.],"metallicFactor":0.}},
+        {"pbrMetallicRoughness":{"baseColorFactor":[0.5,0.5,0.5,1.],"metallicFactor":1.,"roughnessFactor":0.4}},
+        {"alphaMode":"BLEND","pbrMetallicRoughness":{"baseColorFactor":[0.,0.,1.,0.83]}},
+        {"alphaMode":"BLEND","pbrMetallicRoughness":{"baseColorFactor":[1.,0.,0.,0.83]}},
+        {"alphaMode":"BLEND","pbrMetallicRoughness":{"baseColorFactor":[1.,1.,1.,0.9]}},
+        {"alphaMode":"BLEND","pbrMetallicRoughness":{"baseColorFactor":[1.,1.,0.,0.9]}}
+    ]);
+    board["meshes"] = json!((0..6).map(|material| {
+        let primitive = json!({"attributes":{"POSITION":0},"indices":1,"material":material});
+        // A pad export contains many face primitives sharing one material.
+        json!({"primitives": if material == 1 { vec![primitive; 4] } else {vec![primitive]}})
+    }).collect::<Vec<_>>());
+    for index in 0..6 {
+        board["materials"][index]["name"] = json!(format!("mat_{index}"));
+        if index >= 2 {
+            board["materials"][index]["pbrMetallicRoughness"]["metallicFactor"] = json!(0.);
+            board["materials"][index]["pbrMetallicRoughness"]["roughnessFactor"] =
+                json!(if index >= 4 { 0.9 } else { 0.6 });
+        }
+    }
+    // Ink planes on both sides test the minimal viewport display separation.
+    for (mesh, y) in [(4, 0.006_f32), (5, -0.001_f32)] {
+        let offset = bin.len();
+        for _ in 0..2 {
+            for (x, z) in [(0_f32, 0_f32), (0.002, 0.), (0.002, -0.003), (0., -0.003)] {
+                for value in [x, y, z] {
+                    bin.extend(value.to_le_bytes());
+                }
+            }
+        }
+        let view = board["bufferViews"].as_array().map_or(0, Vec::len);
+        let accessor = board["accessors"].as_array().map_or(0, Vec::len);
+        board["bufferViews"]
+            .as_array_mut()
+            .ok_or_else(|| Error::message("missing buffer views"))?
+            .push(json!({"buffer":0,"byteOffset":offset,"byteLength":96}));
+        board["accessors"].as_array_mut().ok_or_else(|| Error::message("missing accessors"))?.push(json!({"bufferView":view,"componentType":5126,"count":8,"type":"VEC3","min":[0,y,-0.003],"max":[0.002,y,0]}));
+        board["meshes"][mesh]["primitives"][0]["attributes"]["POSITION"] = json!(accessor);
+    }
+    board["buffers"][0]["byteLength"] = json!(bin.len());
+    write_gltf(&dir.path().join("board.glb"), &board, &bin)?;
+    let input = dir.path().join("board.txt");
+    let source = std::fs::read_to_string(&input)?;
+    let program = dir.path().join("fake-kicad");
+    let settings = Settings::default();
+    let exporter = Exporter {
+        program: &program,
+        settings: &settings,
+        timeout: Duration::from_secs(5),
+    };
+    for (finish, color) in [
+        ("ENIG", [178, 156, 0]),
+        ("HASL lead-free", [160, 160, 160]),
+        ("OSP", [184, 115, 50]),
+        ("Immersion silver", [213, 213, 213]),
+        ("ENEPIG", [178, 156, 0]),
+    ] {
+        std::fs::write(
+            &input,
+            source.replace(
+                "(general",
+                &format!("(setup (stackup (copper_finish \"{finish}\"))) (general"),
+            ),
+        )?;
+        let inventory = inventory::read(&input)?;
+        assert_eq!(inventory.copper_finish.as_deref(), Some(finish));
+        let stage = exporter.stage_build(inventory, false)?;
+        let native = dir.path().join(format!("{finish}.solidcraft"));
+        cad::build_with_measurements(&stage, &native, false)?;
+        drop(stage);
+        let mut backend = Headless::default();
+        cad::execute(&mut backend, "doc.open", json!({"path":native}))?;
+        let state = backend.session.world_state();
+        assert_eq!(
+            state.bodies.len(),
+            8,
+            "face primitives must be batched by material"
+        );
+        let looks = &backend.session.doc.appearances.bodies;
+        let plated = looks
+            .values()
+            .find(|l| l.name == finish)
+            .ok_or_else(|| Error::message("missing finish appearance"))?;
+        assert_eq!(plated.color, color);
+        let pbr = plated
+            .pbr
+            .ok_or_else(|| Error::message("finish lost metallic appearance"))?;
+        assert_eq!(pbr.metallic(), 1.);
+        assert!((pbr.roughness() - 0.4).abs() < 1e-6);
+        for color in [[0, 0, 255], [255, 0, 0], [255, 255, 255], [255, 255, 0]] {
+            assert!(looks.values().any(|l| l.color == color && l.opacity == 1.0));
+        }
+        let pcb = backend
+            .session
+            .doc
+            .components
+            .iter()
+            .find(|c| c.name == "PCB")
+            .ok_or_else(|| Error::message("missing PCB"))?
+            .id;
+        let meshes: Vec<_> = state.bodies.iter().filter(|b| b.component == pcb).collect();
+        assert_eq!(meshes.len(), 6);
+        for feature in backend
+            .session
+            .doc
+            .features
+            .iter()
+            .filter(|f| f.component == pcb)
+        {
+            let solidcraft_engine::doc::FeatureKind::MeshImport { meshes, .. } = &feature.kind
+            else {
+                return Err(Error::message("board is not a native mesh"));
+            };
+            assert!(
+                meshes.iter().all(|m| m.positions.len() <= 24),
+                "shared face vertices should be stored once"
+            );
+            for (name, z) in [("PCB_5", 6.1), ("PCB_6", -1.1)] {
+                let ink = meshes
+                    .iter()
+                    .find(|m| m.name == name)
+                    .ok_or_else(|| Error::message("missing ink plane"))?;
+                assert!(
+                    ink.positions
+                        .iter()
+                        .skip(2)
+                        .step_by(3)
+                        .all(|v| (v - z).abs() < 1e-6)
+                );
+            }
+        }
+    }
+    let calls = std::fs::read_to_string(dir.path().join("calls"))?;
+    let board_calls: Vec<_> = calls
+        .lines()
+        .filter(|l| l.starts_with("pcb export glb") && l.contains("--board-only"))
+        .collect();
+    assert_eq!(board_calls.len(), 5);
+    for call in board_calls {
+        for flag in [
+            "--include-silkscreen",
+            "--include-soldermask",
+            "--include-pads",
+        ] {
+            assert!(call.contains(flag));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn board_builds_without_any_usable_component_models() -> Result<()> {
+    let (dir, _stage) = fixture(false)?;
+    let input = dir.path().join("board.txt");
+    let (mut empty, bin) = mesh_fixture(false, false);
+    empty["nodes"][0]["children"] = json!([]);
+    write_gltf(&dir.path().join("batch.glb"), &empty, &bin)?;
+    let program = dir.path().join("fake-kicad");
+    let settings = Settings::default();
+    let exporter = Exporter {
+        program: &program,
+        settings: &settings,
+        timeout: Duration::from_secs(5),
+    };
+    let stage = exporter.stage_build(inventory::read(&input)?, true)?;
+    assert_eq!(stage.assets.len(), 1);
+    assert_eq!(stage.omissions.len(), 2);
+    assert!(
+        exporter
+            .stage_build(inventory::read(&input)?, false)
+            .is_err()
+    );
+    // No model assignments: skip the models-only subprocess altogether.
+    std::fs::write(
+        &input,
+        "(kicad_pcb (version 20260101) (generator test) (general (thickness 1)))",
+    )?;
+    std::fs::write(dir.path().join("calls"), "")?;
+    let stage = exporter.stage_build(inventory::read(&input)?, false)?;
+    assert_eq!(stage.assets.len(), 1);
+    assert!(stage.omissions.is_empty());
+    let calls = std::fs::read_to_string(dir.path().join("calls"))?;
+    assert_eq!(
+        calls
+            .lines()
+            .filter(|l| l.starts_with("pcb export glb"))
+            .count(),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn cli_board_layer_switches_are_independent() -> Result<()> {
+    let (dir, _stage) = fixture(false)?;
+    for flag in ["--no-silkscreen", "--no-soldermask", "--no-pads"] {
+        std::fs::write(dir.path().join("calls"), "")?;
+        let result = std::process::Command::new(env!("CARGO_BIN_EXE_solidcraft-kicad"))
+            .arg("build")
+            .arg(dir.path().join("board.txt"))
+            .arg("--output")
+            .arg(dir.path().join(format!("{flag}.solidcraft")))
+            .arg("--kicad-cli")
+            .arg(dir.path().join("fake-kicad"))
+            .arg(flag)
+            .env("XDG_CONFIG_HOME", dir.path())
+            .output()?;
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let calls = std::fs::read_to_string(dir.path().join("calls"))?;
+        let board = calls
+            .lines()
+            .find(|l| l.starts_with("pcb export glb") && l.contains("--board-only"))
+            .ok_or_else(|| Error::message("board export missing"))?;
+        for layer in ["silkscreen", "soldermask", "pads"] {
+            assert_eq!(
+                board.contains(&format!("--include-{layer}")),
+                flag != format!("--no-{layer}")
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn models_with_different_material_responses_are_not_linked() -> Result<()> {
+    let (dir, _stage) = fixture(false)?;
+    let (mut document, bin) = mesh_fixture(false, true);
+    document["materials"][1]["pbrMetallicRoughness"]["roughnessFactor"] = json!(0.2);
+    document["materials"][2]["pbrMetallicRoughness"]["roughnessFactor"] = json!(0.9);
+    write_gltf(&dir.path().join("batch.glb"), &document, &bin)?;
+    let program = dir.path().join("fake-kicad");
+    let settings = Settings::default();
+    let stage = Exporter {
+        program: &program,
+        settings: &settings,
+        timeout: Duration::from_secs(5),
+    }
+    .stage_build(inventory::read(&dir.path().join("board.txt"))?, false)?;
+    let doc = &stage
+        .assembly
+        .as_ref()
+        .ok_or_else(|| Error::message("missing assembly"))?
+        .doc;
+    assert_eq!(doc.features.len(), 3);
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
 fn native_parts_reopen_without_assets_and_move_together() -> Result<()> {
     let (dir, _legacy_stage) = fixture(false)?;
     std::fs::write(dir.path().join("calls"), "")?;
@@ -261,14 +542,14 @@ fn native_parts_reopen_without_assets_and_move_together() -> Result<()> {
             .lines()
             .filter(|l| l.starts_with("pcb export glb "))
             .count(),
-        1
+        2
     );
     let output = dir.path().join("board.solidcraft");
     let report = cad::build(&stage, &output)?;
     assert_eq!(report["measurement"]["body_count"], 3);
     assert!(cad::build(&stage, &output).is_err());
     drop(stage);
-    for file in ["source.step", "batch.glb", "batch-missing.glb"] {
+    for file in ["source.step", "batch.glb", "batch-missing.glb", "board.glb"] {
         std::fs::remove_file(dir.path().join(file))?;
     }
     let mut b = Headless::default();

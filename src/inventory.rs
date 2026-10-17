@@ -29,6 +29,7 @@ pub struct Inventory {
     pub sha256: String,
     pub name: String,
     pub thickness_mm: Option<f64>,
+    pub copper_finish: Option<String>,
     pub footprints: Vec<Footprint>,
     pub warnings: Vec<String>,
 }
@@ -127,11 +128,24 @@ pub fn read(path: &Path) -> Result<Inventory> {
         })?
         .to_string();
     let thickness_mm = ast.general.as_ref().and_then(|g| g.thickness);
+    let copper_finish = nodes
+        .iter()
+        .find(|n| head(n) == Some("setup"))
+        .and_then(|setup| children(setup).iter().find(|n| head(n) == Some("stackup")))
+        .and_then(|stackup| {
+            children(stackup)
+                .iter()
+                .find(|n| head(n) == Some("copper_finish"))
+        })
+        .and_then(|finish| children(finish).get(1).and_then(atom))
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned);
     Ok(Inventory {
         source,
         sha256,
         name,
         thickness_mm,
+        copper_finish,
         footprints,
         warnings,
     })

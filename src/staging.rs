@@ -48,6 +48,30 @@ pub struct Exporter<'a> {
     pub settings: &'a Settings,
 }
 
+/// Board details are tessellated by KiCad, not reconstructed by SolidCraft.
+#[derive(Clone, Copy)]
+pub struct BoardLayers {
+    pub silkscreen: bool,
+    pub soldermask: bool,
+    pub pads: bool,
+}
+
+impl Default for BoardLayers {
+    fn default() -> Self {
+        Self {
+            silkscreen: true,
+            soldermask: true,
+            pads: true,
+        }
+    }
+}
+
+enum ExportKind<'a> {
+    Models,
+    Board(BoardLayers),
+    Step(Option<&'a str>),
+}
+
 impl Exporter<'_> {
     fn run(
         &self,
@@ -97,10 +121,13 @@ impl Exporter<'_> {
         input: &Inventory,
         directory: &Path,
         label: &str,
-        reference: Option<&str>,
-        all: bool,
+        kind: ExportKind<'_>,
     ) -> Result<(PathBuf, String, bool)> {
-        let format = if all { "glb" } else { "step" };
+        let format = if matches!(kind, ExportKind::Step(_)) {
+            "step"
+        } else {
+            "glb"
+        };
         let step = directory.join(format!("{label}.{format}"));
         let mut args: Vec<std::ffi::OsString> = [
             "pcb",
@@ -116,14 +143,26 @@ impl Exporter<'_> {
         .map(Into::into)
         .collect();
         args.push(step.clone().into_os_string());
-        if let Some(reference) = reference {
-            args.extend([
+        match kind {
+            ExportKind::Models => args.push("--no-board-body".into()),
+            ExportKind::Board(layers) => {
+                args.push("--board-only".into());
+                for (enabled, flag) in [
+                    (layers.silkscreen, "--include-silkscreen"),
+                    (layers.soldermask, "--include-soldermask"),
+                    (layers.pads, "--include-pads"),
+                ] {
+                    if enabled {
+                        args.push(flag.into());
+                    }
+                }
+            }
+            ExportKind::Step(Some(reference)) => args.extend([
                 "--no-board-body".into(),
                 "--component-filter".into(),
                 reference.into(),
-            ]);
-        } else if !all {
-            args.push("--board-only".into());
+            ]),
+            ExportKind::Step(None) => args.push("--board-only".into()),
         }
         for (key, value) in &self.settings.project_variables {
             args.extend(["--define-var".into(), format!("{key}={value}").into()]);
@@ -141,14 +180,28 @@ impl Exporter<'_> {
     }
 
     pub fn stage(&self, inventory: Inventory, allow_missing: bool) -> Result<Staged> {
-        self.stage_impl(inventory, allow_missing, false)
+        self.stage_impl(inventory, allow_missing, None)
     }
 
     pub fn stage_build(&self, inventory: Inventory, allow_missing: bool) -> Result<Staged> {
-        self.stage_impl(inventory, allow_missing, true)
+        self.stage_build_with_layers(inventory, allow_missing, BoardLayers::default())
     }
 
-    fn stage_impl(&self, inventory: Inventory, allow_missing: bool, all: bool) -> Result<Staged> {
+    pub fn stage_build_with_layers(
+        &self,
+        inventory: Inventory,
+        allow_missing: bool,
+        layers: BoardLayers,
+    ) -> Result<Staged> {
+        self.stage_impl(inventory, allow_missing, Some(layers))
+    }
+
+    fn stage_impl(
+        &self,
+        inventory: Inventory,
+        allow_missing: bool,
+        layers: Option<BoardLayers>,
+    ) -> Result<Staged> {
         let dir = tempfile::Builder::new()
             .prefix("solidcraft-kicad-")
             .tempdir()?;
@@ -186,9 +239,43 @@ impl Exporter<'_> {
             .ok_or_else(|| Error::message("missing staging folder"))?
             .path()
             .to_path_buf();
-        if all {
-            let (step, log, success) =
-                self.export(&stage.inventory, &directory, "assembly", None, true)?;
+        if let Some(layers) = layers {
+            // These jobs are independent; keep board face construction off the model path.
+            let (models, board) = std::thread::scope(|scope| {
+                let board = scope.spawn(|| {
+                    self.export(
+                        &stage.inventory,
+                        &directory,
+                        "board",
+                        ExportKind::Board(layers),
+                    )
+                });
+                let models = if stage
+                    .inventory
+                    .footprints
+                    .iter()
+                    .any(|f| !f.dnp && !f.models.is_empty())
+                {
+                    self.export(&stage.inventory, &directory, "models", ExportKind::Models)
+                        .map(Some)
+                } else {
+                    Ok(None)
+                };
+                let board = board
+                    .join()
+                    .map_err(|_| Error::message("board export thread failed"))?;
+                Ok::<_, Error>((models?, board?))
+            })?;
+            let (step, log, success) = models
+                .map(|(path, log, success)| (Some(path), log, success))
+                .unwrap_or((None, String::new(), true));
+            let (board, board_log, board_success) = board;
+            if !board_success || export_problem(&board_log) {
+                return Err(Error::message(format!(
+                    "KiCad could not export the board layers\n{}",
+                    board_log.trim()
+                )));
+            }
             if !success || export_problem(&log) {
                 if !success || !allow_missing {
                     return Err(Error::message(format!(
@@ -204,19 +291,24 @@ impl Exporter<'_> {
                 );
             }
             let (assembly, parts, omissions) =
-                assembly::prepare(&step, &stage.inventory, allow_missing)?;
+                assembly::prepare(step.as_deref(), &board, &stage.inventory, allow_missing)?;
             stage.omissions.extend(omissions);
             stage.assets = parts
                 .into_iter()
                 .map(|p| Asset {
+                    path: if p.reference == "PCB" {
+                        board.clone()
+                    } else {
+                        step.as_ref().unwrap_or(&board).clone()
+                    },
                     reference: p.reference,
-                    path: step.clone(),
                     measurement: json!({"body_count": p.bodies}),
                 })
                 .collect();
             stage.assembly = Some(assembly);
             for line in log
                 .lines()
+                .chain(board_log.lines())
                 .filter(|l| l.to_ascii_lowercase().contains("warning"))
             {
                 stage.warnings.push(line.into());
@@ -249,8 +341,7 @@ impl Exporter<'_> {
                 &stage.inventory,
                 &directory,
                 &label,
-                filter.as_deref(),
-                false,
+                ExportKind::Step(filter.as_deref()),
             )?;
             let diagnostic_error = export_problem(&log);
             if !success || diagnostic_error {
