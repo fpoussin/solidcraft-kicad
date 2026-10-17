@@ -172,9 +172,10 @@ mod tests {
             s.model_prefixes["CUSTOM"].path,
             project.join("project-models")
         );
-        let cli = vec![("CUSTOM".into(), "/models/cli".into())];
+        let cli_path = dir.path().join("cli-models");
+        let cli = vec![("CUSTOM".into(), cli_path.to_string_lossy().into_owned())];
         let s = load_with_user(&board, None, Some(&user), &cli, &[])?;
-        assert_eq!(s.model_prefixes["CUSTOM"].path, Path::new("/models/cli"));
+        assert_eq!(s.model_prefixes["CUSTOM"].path, cli_path);
         assert!(
             load_with_user(
                 &board,

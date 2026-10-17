@@ -83,7 +83,7 @@ jobs:
       - name: Build release binary
         run: cargo build --locked --release --target "$RELEASE_TARGET" --bin solidcraft-kicad
       - name: Package and smoke-test binary
-        run: python3 scripts/release.py package "$RELEASE_TARGET"
+        run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/release.py package "$RELEASE_TARGET"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binaries-${{ matrix.target }}
