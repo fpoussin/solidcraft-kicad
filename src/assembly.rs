@@ -48,9 +48,9 @@ struct PlacedModel {
     origin: Mat,
 }
 
-struct ModelMesh {
-    mesh: MeshData,
-    look: Option<Look>,
+pub(crate) struct ModelMesh {
+    pub mesh: MeshData,
+    pub look: Option<Look>,
 }
 
 pub fn prepare(
@@ -59,6 +59,17 @@ pub fn prepare(
     substrate_path: &Path,
     inventory: &Inventory,
     allow_missing: bool,
+) -> Result<(Prepared, Vec<Part>, Vec<String>)> {
+    prepare_with_copper(path, board, substrate_path, inventory, allow_missing, None)
+}
+
+pub(crate) fn prepare_with_copper(
+    path: Option<&Path>,
+    board: &Path,
+    substrate_path: &Path,
+    inventory: &Inventory,
+    allow_missing: bool,
+    copper: Option<&[std::path::PathBuf; 2]>,
 ) -> Result<(Prepared, Vec<Part>, Vec<String>)> {
     let expected: BTreeSet<&str> = inventory
         .footprints
@@ -74,6 +85,9 @@ pub fn prepare(
     let mut substrate = board_groups
         .remove("PCB")
         .ok_or_else(|| Error::message("KiCad exported no board geometry"))?;
+    if let Some(paths) = copper {
+        crate::copper::apply(&mut substrate.meshes, paths)?;
+    }
     let low = substrate
         .meshes
         .iter()
@@ -120,7 +134,7 @@ pub fn prepare(
     {
         for ModelMesh { mesh, look } in &mut substrate.meshes {
             // The board-only GLB contains no component metals: its metallic material
-            // represents pads and plated holes. KiCad's exporter ignores copper_finish.
+            // represents exposed copper, pads and plated holes. KiCad ignores copper_finish.
             if let Some(look) = look
                 && look.pbr.is_some_and(|p| p.metallic() == 1.0)
             {

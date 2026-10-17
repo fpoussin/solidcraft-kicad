@@ -10,8 +10,10 @@ description = "Import KiCad PCBs as native SolidCraft component assemblies"
 clap = { version = "4", features = ["derive"] }
 directories = "6"
 figment = { version = "0.10", features = ["toml"] }
+i_triangle = "0.50.1"
 kiutils_kicad = "0.3"
 kiutils_sexpr = "0.1.1"
+kurbo = "0.13"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
@@ -19,6 +21,7 @@ solidcraft-engine = { git = "https://github.com/tangency-labs/solidcraft.git", r
 solidcraft-mcp = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
 tempfile = "3"
 thiserror = "2"
+usvg = { version = "0.48.1", default-features = false }
 wait-timeout = "0.2"
 
 # Upstream's kernel patches are part of the v0.14.0 dependency graph.

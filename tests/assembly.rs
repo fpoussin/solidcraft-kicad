@@ -117,6 +117,10 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+if [ "$format" = svg ]; then
+  cp "$(dirname "$0")/copper.svg" "$output"
+  exit 0
+fi
 if [ "$format" = glb ] && [ -n "$board_only" ]; then
   cp "$(dirname "$0")/board.glb" "$output"
   exit 0
@@ -139,6 +143,10 @@ cp "$(dirname "$0")/source.step" "$output"
 "##,
     )?;
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700))?;
+    std::fs::write(
+        dir.path().join("copper.svg"),
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="30mm" viewBox="0 0 20 30"/>"#,
+    )?;
     if missing {
         std::fs::write(dir.path().join("missing"), "")?;
     }
@@ -427,6 +435,86 @@ fn board_layers_retain_both_side_colors_finish_and_batched_geometry() -> Result<
 
 #[test]
 #[cfg(unix)]
+fn copper_surfaces_keep_finish_and_drill_openings_after_reopening() -> Result<()> {
+    let (dir, _legacy_stage) = fixture(false)?;
+    let input = dir.path().join("board.txt");
+    let source = std::fs::read_to_string(&input)?.replace(
+        "(general",
+        "(setup (stackup (copper_finish \"ENIG\"))) (general",
+    );
+    std::fs::write(&input, &source)?;
+    std::fs::write(
+        dir.path().join("copper.svg"),
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="30mm" viewBox="0 0 20 30"><rect x="0" y="-3" width="2" height="3" fill="black"/><rect x="0.5" y="-2" width="1" height="1" fill="white"/></svg>"#,
+    )?;
+    let settings = Settings::default();
+    let program = dir.path().join("fake-kicad");
+    let stage = Exporter {
+        program: &program,
+        settings: &settings,
+        timeout: Duration::from_secs(5),
+    }
+    .stage_build(inventory::read(&input)?, false)?;
+    let native = dir.path().join("copper.solidcraft");
+    cad::build_with_measurements(&stage, &native, false)?;
+    drop(stage);
+    std::fs::remove_file(dir.path().join("copper.svg"))?;
+    let mut backend = Headless::default();
+    cad::execute(&mut backend, "doc.open", json!({"path":native}))?;
+    let mut planes = Vec::new();
+    for feature in &backend.session.doc.features {
+        if let solidcraft_engine::doc::FeatureKind::MeshImport { meshes, .. } = &feature.kind {
+            for mesh in meshes {
+                let Some(look) = backend
+                    .session
+                    .doc
+                    .appearances
+                    .bodies
+                    .get(&mesh.name)
+                    .filter(|l| l.name == "ENIG")
+                else {
+                    continue;
+                };
+                assert_eq!(look.color, [178, 156, 0]);
+                assert!(look.pbr.is_some_and(|p| p.metallic() == 1.));
+                let z = mesh.positions[2];
+                assert!(
+                    mesh.positions
+                        .as_chunks::<3>()
+                        .0
+                        .iter()
+                        .all(|p| (p[2] - z).abs() < 1e-6)
+                );
+                let area: f64 = mesh
+                    .triangles
+                    .as_chunks::<3>()
+                    .0
+                    .iter()
+                    .map(|t| {
+                        let p: Vec<_> = t
+                            .iter()
+                            .map(|&i| &mesh.positions[i as usize * 3..i as usize * 3 + 3])
+                            .collect();
+                        let cross = (p[1][0] - p[0][0]) * (p[2][1] - p[0][1])
+                            - (p[1][1] - p[0][1]) * (p[2][0] - p[0][0]);
+                        assert_eq!(cross.is_sign_positive(), z > 0.);
+                        cross.abs() * 0.5
+                    })
+                    .sum();
+                assert!((area - 5.).abs() < 1e-4, "drill opening lost: area {area}");
+                planes.push(z);
+            }
+        }
+    }
+    planes.sort_by(f64::total_cmp);
+    assert_eq!(planes.len(), 2);
+    assert!((planes[0] + 0.035).abs() < 1e-6 && (planes[1] - 4.035).abs() < 1e-6);
+    assert_eq!(std::fs::read_to_string(input)?, source);
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
 fn board_builds_without_any_usable_component_models() -> Result<()> {
     let (dir, _stage) = fixture(false)?;
     let input = dir.path().join("board.txt");
@@ -472,7 +560,12 @@ fn board_builds_without_any_usable_component_models() -> Result<()> {
 #[cfg(unix)]
 fn cli_board_layer_switches_are_independent() -> Result<()> {
     let (dir, _stage) = fixture(false)?;
-    for flag in ["--no-silkscreen", "--no-soldermask", "--no-pads"] {
+    for flag in [
+        "--no-silkscreen",
+        "--no-soldermask",
+        "--no-pads",
+        "--no-copper",
+    ] {
         std::fs::write(dir.path().join("calls"), "")?;
         let result = std::process::Command::new(env!("CARGO_BIN_EXE_solidcraft-kicad"))
             .arg("build")
@@ -490,6 +583,18 @@ fn cli_board_layer_switches_are_independent() -> Result<()> {
             String::from_utf8_lossy(&result.stderr)
         );
         let calls = std::fs::read_to_string(dir.path().join("calls"))?;
+        let copper: Vec<_> = calls
+            .lines()
+            .filter(|l| l.starts_with("pcb export svg"))
+            .collect();
+        assert_eq!(copper.len(), if flag == "--no-copper" { 0 } else { 2 });
+        if !copper.is_empty() {
+            assert!(copper[0].contains("--layers F.Cu"));
+            assert!(copper[1].contains("--layers B.Cu"));
+            assert!(copper.iter().all(|l| l.contains("--page-size-mode 1")
+                && l.contains("--scale 1")
+                && l.contains("--drill-shape-opt 2")));
+        }
         let board = calls
             .lines()
             .find(|l| l.starts_with("pcb export glb") && l.contains("--board-only"))

@@ -67,6 +67,9 @@ struct LayerOptions {
     /// Omit pads and plated holes (included by default).
     #[arg(long)]
     no_pads: bool,
+    /// Omit outer copper tracks, vias and zones (included by default).
+    #[arg(long)]
+    no_copper: bool,
 }
 
 #[derive(Args)]
@@ -124,6 +127,7 @@ fn run(cli: Cli) -> Result<Value> {
                     silkscreen: !layers.no_silkscreen,
                     soldermask: !layers.no_soldermask,
                     pads: !layers.no_pads,
+                    copper: !layers.no_copper,
                 },
             )
         }

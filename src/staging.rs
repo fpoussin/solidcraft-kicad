@@ -54,6 +54,7 @@ pub struct BoardLayers {
     pub silkscreen: bool,
     pub soldermask: bool,
     pub pads: bool,
+    pub copper: bool,
 }
 
 impl Default for BoardLayers {
@@ -62,6 +63,7 @@ impl Default for BoardLayers {
             silkscreen: true,
             soldermask: true,
             pads: true,
+            copper: true,
         }
     }
 }
@@ -179,6 +181,54 @@ impl Exporter<'_> {
         Ok((step, log, success))
     }
 
+    fn export_copper(&self, input: &Inventory, directory: &Path) -> Result<[PathBuf; 2]> {
+        let paths = [directory.join("front.svg"), directory.join("back.svg")];
+        for (layer, path) in ["F.Cu", "B.Cu"].into_iter().zip(&paths) {
+            // Plotting preserves filled zones and drills without reconstructing copper solids.
+            // Page mode 1 and scale 1 retain the source's absolute millimetre coordinates.
+            let mut args: Vec<std::ffi::OsString> = [
+                "pcb",
+                "export",
+                "svg",
+                "--layers",
+                layer,
+                "--mode-single",
+                "--exclude-drawing-sheet",
+                "--page-size-mode",
+                "1",
+                "--scale",
+                "1",
+                "--black-and-white",
+                "--drill-shape-opt",
+                "2",
+                "--output",
+            ]
+            .iter()
+            .map(Into::into)
+            .collect();
+            args.push(path.clone().into_os_string());
+            for (key, value) in &self.settings.project_variables {
+                args.extend(["--define-var".into(), format!("{key}={value}").into()]);
+            }
+            args.push(input.source.clone().into_os_string());
+            let (success, log) = self.run(
+                &args,
+                input
+                    .source
+                    .parent()
+                    .ok_or_else(|| Error::message("PCB has no parent"))?,
+                &path.with_extension("log"),
+            )?;
+            if !success || export_problem(&log) {
+                return Err(Error::message(format!(
+                    "KiCad could not plot {layer}\n{}",
+                    log.trim()
+                )));
+            }
+        }
+        Ok(paths)
+    }
+
     pub fn stage(&self, inventory: Inventory, allow_missing: bool) -> Result<Staged> {
         self.stage_impl(inventory, allow_missing, None)
     }
@@ -241,7 +291,10 @@ impl Exporter<'_> {
             .to_path_buf();
         if let Some(layers) = layers {
             // These jobs are independent; keep board face construction off the model path.
-            let (models, board, substrate) = std::thread::scope(|scope| {
+            let (models, board, substrate, copper) = std::thread::scope(|scope| {
+                let copper = layers
+                    .copper
+                    .then(|| scope.spawn(|| self.export_copper(&stage.inventory, &directory)));
                 let board = scope.spawn(|| {
                     self.export(
                         &stage.inventory,
@@ -275,7 +328,13 @@ impl Exporter<'_> {
                 let substrate = substrate
                     .join()
                     .map_err(|_| Error::message("substrate export thread failed"))?;
-                Ok::<_, Error>((models?, board?, substrate?))
+                let copper = copper
+                    .map(|job| {
+                        job.join()
+                            .map_err(|_| Error::message("copper export thread failed"))?
+                    })
+                    .transpose()?;
+                Ok::<_, Error>((models?, board?, substrate?, copper))
             })?;
             let (step, log, success) = models
                 .map(|(path, log, success)| (Some(path), log, success))
@@ -308,12 +367,13 @@ impl Exporter<'_> {
                         .join("\n"),
                 );
             }
-            let (assembly, parts, omissions) = assembly::prepare(
+            let (assembly, parts, omissions) = assembly::prepare_with_copper(
                 step.as_deref(),
                 &board,
                 &substrate,
                 &stage.inventory,
                 allow_missing,
+                copper.as_ref(),
             )?;
             stage.omissions.extend(omissions);
             stage.assets = parts

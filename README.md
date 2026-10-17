@@ -30,6 +30,7 @@ The SolidCraft dependency and its required kernel patches are pinned to release
 commit `2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae`. `Cargo.lock` is committed. The
 upstream crates include the CAD kernel; the first compilation is larger than a
 typical command-line utility. There is no runtime dependency on FreeCAD.
+README images use Git LFS; run `git lfs pull` if they are missing after cloning.
 
 ## Build a native part assembly
 
@@ -56,8 +57,9 @@ references, prefix overrides and omissions:
 solidcraft-kicad build path/to/board.kicad_pcb --json
 ```
 
-Builds include front and back silkscreen, soldermask with its openings, pads and
-plated holes by default. Soldermask and silkscreen colours come from the PCB's
+Builds include front and back silkscreen, soldermask with its openings, pads,
+plated holes, and outer copper tracks, vias and filled zones by default.
+Soldermask and silkscreen colours come from the PCB's
 physical stackup, including separate colours for each side. Pad and hole plating
 uses the stackup's surface finish: gold for ENIG/ENEPIG and gold finishes, tin for
 HASL/HAL and tin/nickel finishes, silver for silver finishes, and copper for OSP.
@@ -68,15 +70,28 @@ materials retain their exported opacity.
 A 0.1 mm outward silkscreen display offset keeps lettering visible in
 SolidCraft 0.14's viewport.
 
+Outer copper is plotted by KiCad and tessellated into flat surfaces, with a
+5 µm curve tolerance. Overlapping items are united, drill openings are subtracted,
+and copper is clipped to the board outline and cutouts. Covered copper is baked
+into the soldermask as a subtle colour and roughness variation; exposed copper
+uses the same finish as the pads. Each side adds at most two mesh bodies,
+independent of the number of tracks or zones. Inner copper is omitted.
+
 Omit individual details when desired:
 
 ```sh
 solidcraft-kicad build board.kicad_pcb --no-silkscreen
 solidcraft-kicad build board.kicad_pcb --no-pads --no-soldermask
+solidcraft-kicad build board.kicad_pcb --no-copper
 ```
 
+`--no-copper` omits the outer copper surfaces while retaining raised pads and
+plated holes. `--no-pads` omits those solids; flat pad shapes remain part of the
+copper plots when copper is enabled.
+
 The board layers and component models are exported concurrently as binary glTF
-(GLB), alongside a small STEP export of the substrate. Faces sharing a material
+(GLB), alongside copper SVG plots and a small STEP export of the substrate.
+Faces sharing a material
 are batched, and exact duplicate board vertices are stored once. The writer
 preserves placements, converts metres/Y-up to KiCad's
 millimetres/Z-up, and groups model meshes under their footprint references.
@@ -84,7 +99,7 @@ Identical geometry with matching colour and material response is stored once,
 with a named occurrence for each footprint. Each occurrence retains its own
 placement and visibility. Component meshes avoid STEP reconstruction and surface
 tessellation both during conversion and when SolidCraft opens the file. Only the
-substrate uses native CAD geometry; mask, silk and pad triangles are kept as
+substrate uses native CAD geometry; mask, silk, pad and copper triangles are kept as
 batched mesh bodies, without triangle edges cluttering the board surface.
 
 `--json --measure` also includes mesh dimensions, volume and area in the report.
@@ -265,13 +280,13 @@ python3 scripts/validate-desktop.py --app /path/to/SolidCraft.AppImage \
   --native /path/to/board.solidcraft --max-open-seconds 3
 ```
 
-A development benchmark with 323 placed parts and all default board details
-converted in **6.97 s**. SolidCraft 0.14.0 opened the result in **1.00 s**, with
-its first render ready in **1.68 s** in the isolated desktop. The placed parts,
+A development benchmark with 323 placed parts and all default board details,
+including outer copper, converted in **7.29 s**. SolidCraft 0.14.0 opened the
+result in **1.60 s**, with its first render ready in **2.40 s** in the isolated
+desktop. The placed parts,
 including the board, share 42 geometry definitions. All board layers together
-use five mesh bodies alongside the CAD substrate; the native file occupies
-**14.2 MB**. Exact vertex sharing saves about 3 MB without simplifying the board
-layers. One unavailable
+use nine mesh bodies alongside the CAD substrate; the native file occupies
+**27.6 MB**. One unavailable
 model was reported as an omission. These are measured wall times on the
 development machine, excluding application startup.
 

@@ -2,6 +2,7 @@
 pub mod assembly;
 pub mod cad;
 pub mod config;
+mod copper;
 pub mod error;
 pub mod inventory;
 pub mod progress;
