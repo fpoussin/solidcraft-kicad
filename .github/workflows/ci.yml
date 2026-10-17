@@ -55,9 +55,10 @@ jobs:
           - runner: macos-15
             target: aarch64-apple-darwin
             rustflags: ''
-          - runner: windows-2022
+          # Standard GitHub-hosted runners remain free for this public repository.
+          - runner: windows-2025
             target: x86_64-pc-windows-msvc
-            rustflags: '-C target-feature=+crt-static'
+            rustflags: '-C target-feature=+crt-static -C linker=rust-lld -C linker-flavor=lld-link'
     defaults:
       run:
         shell: bash
@@ -75,13 +76,20 @@ jobs:
           rustup toolchain install stable --profile minimal
           rustup default stable
           rustup target add "$RELEASE_TARGET"
+      - name: Configure Windows SDK for LLVM linker
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+        with:
+          arch: x64
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: ${{ matrix.target }}
       - name: Test
-        run: cargo test --locked --target "$RELEASE_TARGET"
+        # Share optimized dependencies with the shipped binary instead of also
+        # compiling the entire CAD engine in the debug profile.
+        run: cargo test --locked --release --target "$RELEASE_TARGET" --timings
       - name: Build release binary
-        run: cargo build --locked --release --target "$RELEASE_TARGET" --bin solidcraft-kicad
+        run: cargo build --locked --release --target "$RELEASE_TARGET" --bin solidcraft-kicad --timings
       - name: Package and smoke-test binary
         run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/release.py package "$RELEASE_TARGET"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -90,6 +98,14 @@ jobs:
           path: artifacts/release/*
           if-no-files-found: error
           compression-level: 0
+          retention-days: 14
+      - name: Upload build timings
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: timings-${{ matrix.target }}
+          path: target/cargo-timings/*.html
+          if-no-files-found: ignore
           retention-days: 14
 
   publish:
