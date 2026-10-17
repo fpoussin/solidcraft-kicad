@@ -21,7 +21,7 @@ TARGETS = (
 
 
 def version():
-    package = (ROOT / "Cargo.toml").read_text().split("[package]", 1)[1].split("\n[", 1)[0]
+    package = (ROOT / "Cargo.toml").read_text(encoding="utf-8").split("[package]", 1)[1].split("\n[", 1)[0]
     match = re.search(r'^version\s*=\s*"([0-9]+\.[0-9]+\.[0-9]+)"\s*$', package, re.MULTILINE)
     if not match:
         raise ValueError("Cargo.toml must declare a stable semantic version")
@@ -34,12 +34,60 @@ def validate_tag(tag):
         raise ValueError(f"tag {tag!r} must match Cargo.toml version {expected!r}")
 
 
+def dependency_notices(directory):
+    metadata = json.loads(subprocess.check_output(
+        ["cargo", "metadata", "--locked", "--format-version", "1"], cwd=ROOT, text=True, encoding="utf-8"))
+    files = []
+    index = []
+    for package in sorted(metadata["packages"], key=lambda p: (p["name"], p["version"])):
+        if not package.get("source"):
+            continue
+        base = Path(package["manifest_path"]).parent
+        roots = [base]
+        if package["source"].startswith("git+"):
+            for parent in base.parents:
+                roots.append(parent)
+                if (parent / ".git").exists():
+                    break
+                if len(roots) == 6:
+                    break
+        notices = []
+        if package.get("license_file"):
+            declared = base / package["license_file"]
+            if declared.is_file():
+                notices.append((declared, declared.name))
+        for root in roots:
+            found = []
+            for path in sorted(root.iterdir()):
+                if path.name.upper().startswith(("LICENSE", "LICENCE", "COPYING", "NOTICE")):
+                    if path.is_file():
+                        found.append((path, path.name))
+                    elif path.is_dir():
+                        found.extend((p, p.relative_to(root).as_posix()) for p in sorted(path.rglob("*")) if p.is_file())
+            if found:
+                notices.extend(found)
+                break
+        prefix = f"THIRD-PARTY-LICENSES/{package['name']}-{package['version']}"
+        unique = {relative: path for path, relative in notices}
+        files.extend((path, f"{prefix}/{relative}") for relative, path in unique.items())
+        index.append({
+            "name": package["name"], "version": package["version"],
+            "license": package.get("license"), "authors": package.get("authors", []),
+            "repository": package.get("repository"),
+            "notice_files": [f"{prefix}/{relative}" for relative in unique],
+        })
+    manifest = directory / "DEPENDENCIES.json"
+    manifest.write_text(json.dumps(index, indent=2) + "\n", encoding="utf-8")
+    files.append((manifest, "THIRD-PARTY-LICENSES/DEPENDENCIES.json"))
+    return files
+
+
 def package(target):
     if os.environ.get("GITHUB_REF_TYPE") == "tag":
         validate_tag(os.environ["GITHUB_REF_NAME"])
     executable = "solidcraft-kicad" + (".exe" if target.endswith("windows-msvc") else "")
     binary = ROOT / "target" / target / "release" / executable
-    actual = subprocess.check_output([str(binary), "--version"], text=True).strip()
+    actual = subprocess.check_output([str(binary), "--version"], text=True, encoding="utf-8").strip()
     if actual != f"solidcraft-kicad {version()}":
         raise ValueError(f"unexpected binary version: {actual}")
     subprocess.run([str(binary), "build", "--help"], check=True, stdout=subprocess.DEVNULL)
@@ -53,9 +101,10 @@ def package(target):
         info.write_text(json.dumps({
             "version": version(), "target": target,
             "commit": os.environ.get("GITHUB_SHA") or subprocess.check_output(
-                ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
-        }, indent=2) + "\n")
+                ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, encoding="utf-8").strip(),
+        }, indent=2) + "\n", encoding="utf-8")
         files = [(binary, executable), (info, info.name)]
+        files += dependency_notices(Path(temporary))
         files += [(ROOT / path, path) for path in (
             "README.md", "CHANGELOG.md", "LICENSE-MIT", "LICENSE-APACHE",
             "ATTRIBUTION.md", "Cargo.lock", "docs/images/pcb-assembly.png",
@@ -88,13 +137,13 @@ def prepare(tag):
         if path.stat().st_size == 0:
             raise ValueError(f"empty release archive: {name}")
         checksums.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {name}\n")
-    (OUTPUT / "SHA256SUMS").write_text("".join(checksums))
-    changelog = (ROOT / "CHANGELOG.md").read_text()
+    (OUTPUT / "SHA256SUMS").write_text("".join(checksums), encoding="utf-8")
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     marker = f"## {version()}\n"
     if marker not in changelog:
         raise ValueError(f"missing changelog entry for {version()}")
     notes = changelog.split(marker, 1)[1].split("\n## ", 1)[0].strip()
-    (OUTPUT / "notes.md").write_text(notes + "\n")
+    (OUTPUT / "notes.md").write_text(notes + "\n", encoding="utf-8")
 
 
 def main():

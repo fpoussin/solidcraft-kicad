@@ -22,7 +22,8 @@ do not depend on temporary assets.
 Download a prebuilt archive from [GitHub Releases](https://github.com/fpoussin/solidcraft-kicad/releases)
 for Linux x64, macOS arm64 (Apple Silicon), or Windows x64. Extract it and put the
 executable on your `PATH`. Releases include `SHA256SUMS` for archive verification.
-The macOS binary targets macOS 14 or later; Linux binaries are built on Ubuntu 22.04.
+The macOS binary targets macOS 14 or later; Linux binaries require glibc 2.35 or
+later and are built on Ubuntu 22.04.
 
 To build from source:
 
@@ -324,8 +325,9 @@ git push origin v0.1.0
 ```
 
 The tag runs the complete CI workflow. Once every platform and check passes, CI
-packages the binaries with documentation, licenses, the README image and build
-provenance, generates `SHA256SUMS`, and publishes all three archives together to
+packages the binaries with documentation, project and dependency license notices,
+the README image and build provenance, generates `SHA256SUMS`, and publishes all
+three archives together to
 GitHub Releases. Publishing uses the workflow's GitHub token; no personal token
 or local release builds are required. A failed draft upload can be retried; an
 already published release is never overwritten.

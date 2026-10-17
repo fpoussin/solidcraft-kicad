@@ -30,6 +30,9 @@ class ReleaseTests(unittest.TestCase):
         self.image = self.root / "docs/images/pcb-assembly.png"
         self.image.parent.mkdir(parents=True)
         self.image.write_bytes(b"\x89PNG\r\n\x1a\n")
+        self.dependency = self.root / "dependency"
+        self.dependency.mkdir()
+        (self.dependency / "LICENSE-MIT").write_text("Dependency permission notice")
         for target in release.TARGETS:
             name = "solidcraft-kicad.exe" if target.endswith("windows-msvc") else "solidcraft-kicad"
             binary = self.root / "target" / target / "release" / name
@@ -38,7 +41,14 @@ class ReleaseTests(unittest.TestCase):
             binary.chmod(0o755)
 
     def package(self, target):
-        with patch.object(release.subprocess, "check_output", return_value="solidcraft-kicad 0.1.0\n"), \
+        def output(command, **_):
+            if command[0] == "cargo":
+                return json.dumps({"packages": [{
+                    "name": "example", "version": "1.0.0", "source": "registry+example",
+                    "manifest_path": str(self.dependency / "Cargo.toml"), "license": "MIT",
+                }]})
+            return "solidcraft-kicad 0.1.0\n"
+        with patch.object(release.subprocess, "check_output", side_effect=output), \
              patch.object(release.subprocess, "run"), contextlib.redirect_stdout(io.StringIO()):
             release.package(target)
 
@@ -61,6 +71,8 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn(f"{base}/LICENSE-MIT", names)
             self.assertIn(f"{base}/LICENSE-APACHE", names)
             self.assertIn(f"{base}/docs/images/pcb-assembly.png", names)
+            self.assertIn(f"{base}/THIRD-PARTY-LICENSES/example-1.0.0/LICENSE-MIT", names)
+            self.assertIn(f"{base}/THIRD-PARTY-LICENSES/DEPENDENCIES.json", names)
             self.assertEqual(info, {"version": "0.1.0", "target": target, "commit": "a" * 40})
         release.prepare("v0.1.0")
         lines = (release.OUTPUT / "SHA256SUMS").read_text().splitlines()

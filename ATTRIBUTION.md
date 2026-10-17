@@ -24,4 +24,6 @@ The following dependencies provide the implementation's main capabilities:
 
 SolidCraft's required truck/matext4cgmath patches are reused at the same immutable
 upstream commit as its engine. Cargo.lock records all direct and transitive
-versions. The dependency licenses are distributed with their Cargo sources.
+versions. Release archives include available dependency license notices and a
+dependency manifest under `THIRD-PARTY-LICENSES`. The original notices are also
+distributed with their Cargo sources.

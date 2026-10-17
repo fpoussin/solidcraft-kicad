@@ -21,8 +21,9 @@ on your `PATH`. `SHA256SUMS` contains archive checksums.
 
 Requires **KiCad 10** and its model libraries. Offline conversion uses the
 embedded SolidCraft 0.14.0 engine; opening the result or live insertion requires
-SolidCraft 0.14.0. The macOS binary targets macOS 14 or later. Linux binaries are
-built on Ubuntu 22.04. See the README for configuration and examples.
+SolidCraft 0.14.0. The macOS binary targets macOS 14 or later. Linux binaries
+require glibc 2.35 or later and are built on Ubuntu 22.04. See the README for
+configuration and examples.
 
 On the development machine, a 323-part board with all default details converts
 in about **7.5 seconds**, opens in **1.6 seconds**, and renders in **2.4 seconds**
