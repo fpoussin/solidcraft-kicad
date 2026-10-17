@@ -317,14 +317,15 @@ preferences when loading a project that has none.
 
 ## Releases
 
-CI runs formatting, Clippy, and release-packaging checks, then tests and builds
-native binaries for Linux x64, macOS arm64 and Windows x64. Each build is available
-as a workflow artifact.
+CI runs only on version-tag pushes (`v*`). It runs formatting, Clippy, and
+release-packaging checks, then tests and builds native binaries for Linux x64,
+macOS arm64 and Windows x64. Each build is available as a workflow artifact.
+Branch pushes and pull requests do not start CI.
 
 To publish a release, update `Cargo.toml`, `Cargo.lock` and the corresponding
 section in [CHANGELOG.md](CHANGELOG.md), commit with a signature, and push the
-branch. After CI passes, create and push a signed `vVERSION` tag matching the
-package version. For example:
+branch. Create and push a signed `vVERSION` tag matching the package version;
+CI validates it before publishing. For example:
 
 ```sh
 git tag -s v0.1.1 -m 'solidcraft-kicad v0.1.1'
