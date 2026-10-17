@@ -232,7 +232,7 @@ are excluded. Live insertion validates imported solids during staging; offline
 builds preserve KiCad's coloured meshes. `--measure` adds mesh measurements.
 Use `--json` to review omissions before relying on an assembly for fit checks.
 
-Tracks, zones and inner copper are omitted. The substrate solid represents the
+Inner copper is omitted. The substrate solid represents the
 dielectric body and can be thinner than the board's nominal total stack-up.
 Board surfaces and component placement follow KiCad's stack-up offsets. Native
 mesh components support visual fit checks, placement and visibility; editable
