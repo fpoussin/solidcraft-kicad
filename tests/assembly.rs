@@ -100,6 +100,8 @@ fn fixture(missing: bool) -> Result<(tempfile::TempDir, Staged)> {
     write_mesh_fixture(&dir.path().join("batch-missing.glb"), true, false)?;
     let (mut board, bin) = mesh_fixture(false, false);
     board["nodes"][0]["children"] = json!([1]);
+    board["materials"][0]["pbrMetallicRoughness"]["metallicFactor"] = json!(0.);
+    board["materials"][0]["pbrMetallicRoughness"]["roughnessFactor"] = json!(0.8);
     write_gltf(&dir.path().join("board.glb"), &board, &bin)?;
     std::fs::write(
         &script,
@@ -269,7 +271,7 @@ fn board_layers_retain_both_side_colors_finish_and_batched_geometry() -> Result<
         {"name":"=>[Top Silkscreen]", "mesh":4},
         {"name":"=>[Bottom Silkscreen]", "mesh":5}]);
     board["materials"] = json!([
-        {"pbrMetallicRoughness":{"baseColorFactor":[0.,0.5,0.,1.],"metallicFactor":0.}},
+        {"pbrMetallicRoughness":{"baseColorFactor":[0.,0.5,0.,1.],"metallicFactor":0.,"roughnessFactor":0.8}},
         {"pbrMetallicRoughness":{"baseColorFactor":[0.5,0.5,0.5,1.],"metallicFactor":1.,"roughnessFactor":0.4}},
         {"alphaMode":"BLEND","pbrMetallicRoughness":{"baseColorFactor":[0.,0.,1.,0.83]}},
         {"alphaMode":"BLEND","pbrMetallicRoughness":{"baseColorFactor":[1.,0.,0.,0.83]}},
@@ -380,16 +382,20 @@ fn board_layers_retain_both_side_colors_finish_and_batched_geometry() -> Result<
         {
             let solidcraft_engine::doc::FeatureKind::MeshImport { meshes, .. } = &feature.kind
             else {
-                return Err(Error::message("board is not a native mesh"));
+                assert!(matches!(
+                    feature.kind,
+                    solidcraft_engine::doc::FeatureKind::Import { .. }
+                ));
+                continue;
             };
             assert!(
                 meshes.iter().all(|m| m.positions.len() <= 24),
                 "shared face vertices should be stored once"
             );
-            for (name, z) in [("PCB_5", 6.1), ("PCB_6", -1.1)] {
+            for (color, z) in [([255, 255, 255], 6.1), ([255, 255, 0], -1.1)] {
                 let ink = meshes
                     .iter()
-                    .find(|m| m.name == name)
+                    .find(|m| looks.get(&m.name).is_some_and(|l| l.color == color))
                     .ok_or_else(|| Error::message("missing ink plane"))?;
                 assert!(
                     ink.positions
@@ -569,9 +575,25 @@ fn native_parts_reopen_without_assets_and_move_together() -> Result<()> {
     let colors: std::collections::BTreeSet<_> = state
         .bodies
         .iter()
-        .filter_map(|body| body.body.color().map(|color| color.map(f32::to_bits)))
+        .filter_map(|body| {
+            b.session
+                .doc
+                .body_color(body)
+                .map(|color| color.map(f32::to_bits))
+        })
         .collect();
     assert_eq!(colors.len(), 3, "component colours were lost");
+    let substrate = state
+        .bodies
+        .iter()
+        .find(|body| !body.body.is_mesh())
+        .ok_or_else(|| Error::message("missing CAD substrate"))?;
+    let mesh = substrate.mesh();
+    assert!(!mesh.edges.is_empty(), "native board has no display edges");
+    assert!(
+        (0..mesh.edges.len()).any(|i| mesh.shaded_edge_visible(i)),
+        "board edges are hidden in shaded-with-edges style"
+    );
     for name in ["PCB", "R1", "U1"] {
         let component = b
             .session
@@ -1009,7 +1031,14 @@ fn gps_mesh_acceptance() -> Result<()> {
     let mut b = Headless::default();
     cad::execute(&mut b, "doc.open", json!({"path": native}))?;
     let state = b.session.world_state();
-    assert!(state.bodies.iter().all(|body| body.body.is_mesh()));
+    assert_eq!(
+        state
+            .bodies
+            .iter()
+            .filter(|body| !body.body.is_mesh())
+            .count(),
+        1
+    );
     assert_eq!(b.session.doc.occurrences.len(), 8);
     assert!(b.session.doc.components.len() <= 8);
     let measured = cad::execute(&mut b, "inspect.measure", json!({}))?;

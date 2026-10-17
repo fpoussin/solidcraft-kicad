@@ -6,7 +6,9 @@ KiUtils, and SolidCraft's own engine, document writer, and control client.
 
 The result is a PCB parent component with a substrate child and a child per
 populated footprint with visible assigned models. Builds use coloured triangle
-meshes so even large boards open quickly. Each footprint can be moved or hidden
+meshes for component models and board coatings so even large boards open quickly.
+The substrate is a native CAD solid, giving the PCB outline and hole edges in
+SolidCraft's default **Shaded with edges** view. Each footprint can be moved or hidden
 independently; moving the parent moves the board and its parts together. Colours
 and KiCad's model placement are retained. Saved designs embed the geometry and
 do not depend on temporary assets.
@@ -74,13 +76,16 @@ solidcraft-kicad build board.kicad_pcb --no-pads --no-soldermask
 ```
 
 The board layers and component models are exported concurrently as binary glTF
-(GLB). Faces sharing a material are batched, and exact duplicate board vertices
-are stored once. The writer preserves placements, converts metres/Y-up to KiCad's
+(GLB), alongside a small STEP export of the substrate. Faces sharing a material
+are batched, and exact duplicate board vertices are stored once. The writer
+preserves placements, converts metres/Y-up to KiCad's
 millimetres/Z-up, and groups model meshes under their footprint references.
 Identical geometry with matching colour and material response is stored once,
 with a named occurrence for each footprint. Each occurrence retains its own
-placement and visibility. Native mesh geometry avoids STEP reconstruction and
-surface tessellation both during conversion and when SolidCraft opens the file.
+placement and visibility. Component meshes avoid STEP reconstruction and surface
+tessellation both during conversion and when SolidCraft opens the file. Only the
+substrate uses native CAD geometry; mask, silk and pad triangles are kept as
+batched mesh bodies, without triangle edges cluttering the board surface.
 
 `--json --measure` also includes mesh dimensions, volume and area in the report.
 These measurements describe the exported triangles; builds are intended for
@@ -205,7 +210,7 @@ are excluded. Live insertion validates imported solids during staging; offline
 builds preserve KiCad's coloured meshes. `--measure` adds mesh measurements.
 Use `--json` to review omissions before relying on an assembly for fit checks.
 
-Tracks, zones and inner copper are omitted. The substrate mesh represents the
+Tracks, zones and inner copper are omitted. The substrate solid represents the
 dielectric body and can be thinner than the board's nominal total stack-up.
 Board surfaces and component placement follow KiCad's stack-up offsets. Native
 mesh components support visual fit checks, placement and visibility; editable
@@ -227,7 +232,8 @@ Normal tests need no KiCad installation or GUI: an analytic solid and a fake
 exporter exercise concurrent board/model exports, both-side layer colours,
 surface finishes, metallic appearances, vertex sharing, persistence, individual
 visibility and movement, collisions in names, rollback, destination changes,
-missing-model policy and lost replies.
+missing-model policy and lost replies. The substrate is also checked for display
+edges visible in the shaded-with-edges style after saving and reopening.
 Board-specific acceptance tests are ignored by default because their source
 boards and model libraries are not bundled. See [tests/assembly.rs](tests/assembly.rs)
 for their required environment variables and expected geometry.
@@ -260,11 +266,12 @@ python3 scripts/validate-desktop.py --app /path/to/SolidCraft.AppImage \
 ```
 
 A development benchmark with 323 placed parts and all default board details
-converted in **6.82 s**. SolidCraft 0.14.0 opened the result in **0.94 s**, with
-its first render ready in **1.31 s** in the isolated desktop. The placed parts,
+converted in **6.97 s**. SolidCraft 0.14.0 opened the result in **1.00 s**, with
+its first render ready in **1.68 s** in the isolated desktop. The placed parts,
 including the board, share 42 geometry definitions. All board layers together
-use six mesh bodies; the native file occupies **14.1 MB**. Exact vertex sharing
-reduced that from 17.1 MB without changing the rendered image. One unavailable
+use five mesh bodies alongside the CAD substrate; the native file occupies
+**14.2 MB**. Exact vertex sharing saves about 3 MB without simplifying the board
+layers. One unavailable
 model was reported as an omission. These are measured wall times on the
 development machine, excluding application startup.
 

@@ -56,6 +56,7 @@ struct ModelMesh {
 pub fn prepare(
     path: Option<&Path>,
     board: &Path,
+    substrate_path: &Path,
     inventory: &Inventory,
     allow_missing: bool,
 ) -> Result<(Prepared, Vec<Part>, Vec<String>)> {
@@ -130,6 +131,17 @@ pub fn prepare(
         }
     }
     groups.insert("PCB".into(), substrate);
+    let native_substrate = solidcraft_engine::io::step_import_feature(
+        &std::fs::read(substrate_path)?,
+        "substrate.step",
+    )
+    .map_err(|e| Error::message(e.to_string()))?;
+    if !native_substrate.warnings.is_empty() || native_substrate.body_names.is_empty() {
+        return Err(Error::message(format!(
+            "invalid native substrate: {}",
+            native_substrate.warnings.join("; ")
+        )));
+    }
     let mut doc = Document::new(&inventory.name);
     let parent = doc
         .add_component(Some(&inventory.name), 0)
@@ -140,7 +152,10 @@ pub fn prepare(
     let mut omissions = Vec::new();
     for reference in std::iter::once("PCB").chain(expected.iter().copied()) {
         let model = groups.remove(reference);
-        if model.as_ref().is_none_or(|m| m.meshes.is_empty()) {
+        if model
+            .as_ref()
+            .is_none_or(|m| m.meshes.is_empty() && reference != "PCB")
+        {
             let message =
                 format!("{reference}: omitted; KiCad exported no geometry for the assigned models");
             if reference == "PCB" || !allow_missing {
@@ -150,12 +165,40 @@ pub fn prepare(
             continue;
         }
         let model = model.ok_or_else(|| Error::message("missing model geometry"))?;
-        let meshes = model.meshes;
+        let mut meshes = model.meshes;
+        let mut substrate_look = None;
+        if reference == "PCB" {
+            meshes.retain(|item| {
+                let body = item
+                    .look
+                    .as_ref()
+                    .and_then(|l| l.pbr)
+                    .is_some_and(|p| p.metallic() == 0.0 && (p.roughness() - 0.8).abs() < 1e-5);
+                if body {
+                    substrate_look = item.look.clone();
+                }
+                !body
+            });
+            if substrate_look.is_none() {
+                return Err(Error::message(
+                    "KiCad board export has no substrate material",
+                ));
+            }
+        }
         let name = unique_name(reference, &mut names);
         let placement = mat_mul(&TO_Z_UP, &mat_mul(&model.origin, &TO_Y_UP));
-        let key = model_key(&meshes)?;
-        let count = meshes.len();
-        if let Some(&component) = definitions.get(&key) {
+        let key = if reference == "PCB" {
+            None
+        } else {
+            Some(model_key(&meshes)?)
+        };
+        let count = meshes.len()
+            + if reference == "PCB" {
+                native_substrate.body_names.len()
+            } else {
+                0
+            };
+        if let Some(&component) = key.as_ref().and_then(|key| definitions.get(key)) {
             let occurrence = doc
                 .add_occurrence(component, parent, placement)
                 .map_err(|e| Error::message(e.to_string()))?;
@@ -178,7 +221,24 @@ pub fn prepare(
         {
             o.transform = placement;
         }
-        definitions.insert(key, component);
+        if let Some(key) = key {
+            definitions.insert(key, component);
+        }
+        if reference == "PCB" {
+            if let Some(look) = substrate_look {
+                doc.appearances.components.insert(component, look);
+            }
+            let label = unique_name("PCB substrate", &mut names);
+            let feature = doc
+                .add_feature(native_substrate.kind.clone(), Some(&label))
+                .map_err(|e| Error::message(e.to_string()))?;
+            if let Some(feature) = doc.feature_mut(feature) {
+                feature.component = component;
+                feature.body_names = (1..=native_substrate.body_names.len())
+                    .map(|i| format!("{label}_{i}"))
+                    .collect();
+            }
+        }
         let meshes: Vec<_> = meshes
             .into_iter()
             .enumerate()
@@ -190,17 +250,19 @@ pub fn prepare(
                 mesh
             })
             .collect();
-        let feature = doc
-            .add_feature(
-                FeatureKind::MeshImport {
-                    file: format!("{reference}.glb"),
-                    meshes,
-                },
-                Some(&name),
-            )
-            .map_err(|e| Error::message(e.to_string()))?;
-        if let Some(f) = doc.feature_mut(feature) {
-            f.component = component;
+        if !meshes.is_empty() {
+            let feature = doc
+                .add_feature(
+                    FeatureKind::MeshImport {
+                        file: format!("{reference}.glb"),
+                        meshes,
+                    },
+                    Some(&name),
+                )
+                .map_err(|e| Error::message(e.to_string()))?;
+            if let Some(f) = doc.feature_mut(feature) {
+                f.component = component;
+            }
         }
         parts.push(Part {
             reference: reference.into(),

@@ -241,13 +241,21 @@ impl Exporter<'_> {
             .to_path_buf();
         if let Some(layers) = layers {
             // These jobs are independent; keep board face construction off the model path.
-            let (models, board) = std::thread::scope(|scope| {
+            let (models, board, substrate) = std::thread::scope(|scope| {
                 let board = scope.spawn(|| {
                     self.export(
                         &stage.inventory,
                         &directory,
                         "board",
                         ExportKind::Board(layers),
+                    )
+                });
+                let substrate = scope.spawn(|| {
+                    self.export(
+                        &stage.inventory,
+                        &directory,
+                        "substrate",
+                        ExportKind::Step(None),
                     )
                 });
                 let models = if stage
@@ -264,12 +272,22 @@ impl Exporter<'_> {
                 let board = board
                     .join()
                     .map_err(|_| Error::message("board export thread failed"))?;
-                Ok::<_, Error>((models?, board?))
+                let substrate = substrate
+                    .join()
+                    .map_err(|_| Error::message("substrate export thread failed"))?;
+                Ok::<_, Error>((models?, board?, substrate?))
             })?;
             let (step, log, success) = models
                 .map(|(path, log, success)| (Some(path), log, success))
                 .unwrap_or((None, String::new(), true));
             let (board, board_log, board_success) = board;
+            let (substrate, substrate_log, substrate_success) = substrate;
+            if !substrate_success || export_problem(&substrate_log) {
+                return Err(Error::message(format!(
+                    "KiCad could not export the native substrate\n{}",
+                    substrate_log.trim()
+                )));
+            }
             if !board_success || export_problem(&board_log) {
                 return Err(Error::message(format!(
                     "KiCad could not export the board layers\n{}",
@@ -290,8 +308,13 @@ impl Exporter<'_> {
                         .join("\n"),
                 );
             }
-            let (assembly, parts, omissions) =
-                assembly::prepare(step.as_deref(), &board, &stage.inventory, allow_missing)?;
+            let (assembly, parts, omissions) = assembly::prepare(
+                step.as_deref(),
+                &board,
+                &substrate,
+                &stage.inventory,
+                allow_missing,
+            )?;
             stage.omissions.extend(omissions);
             stage.assets = parts
                 .into_iter()
@@ -309,6 +332,7 @@ impl Exporter<'_> {
             for line in log
                 .lines()
                 .chain(board_log.lines())
+                .chain(substrate_log.lines())
                 .filter(|l| l.to_ascii_lowercase().contains("warning"))
             {
                 stage.warnings.push(line.into());
