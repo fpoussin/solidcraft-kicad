@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0
+
+- Upgrade the embedded SolidCraft engine, control client and matching kernel
+  patches to the `v0.15.0` release tag.
+- Live insertion accepts SolidCraft 0.15.0 and newer using semantic version
+  comparison. JSON insertion reports identify the connected desktop version.
+- Generated assemblies use SolidCraft file format 26 and require SolidCraft
+  0.15.0 or later to open. SolidCraft 0.14.x and earlier cannot open them.
+- Run validation for pull requests and branch pushes; build and publish release
+  archives only for version tags, after checks pass on all three platforms.
+
 ## 0.1.1
 
 - Release builds notify interactive users about newer stable GitHub releases,
