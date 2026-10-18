@@ -102,7 +102,7 @@ pub(crate) fn prepare_with_copper(
         .fold(f64::NEG_INFINITY, f64::max);
     for item in &mut substrate.meshes {
         // KiCad marks its silk material as a rough dielectric. Keep a small visual
-        // separation: SolidCraft 0.14's viewport otherwise hides ink behind the mask.
+        // separation so the desktop viewport doesn't hide ink behind the mask.
         if item
             .look
             .as_ref()

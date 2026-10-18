@@ -921,6 +921,7 @@ fn cli_build_is_quiet_by_default_and_json_is_opt_in() -> Result<()> {
         assert!(!board.with_extension("solidcraft").exists());
         if report {
             let value: Value = serde_json::from_slice(&result.stdout)?;
+            assert_eq!(value["solidcraft_version"], "0.15.0");
             assert_eq!(value["result"]["output"], json!(output));
             assert_eq!(value["result"]["measurement"]["body_count"], 3);
             assert_eq!(value["parts"], json!(["PCB", "R1", "U1"]));
@@ -1091,7 +1092,7 @@ impl Backend for App {
                     json!({}),
                     "version checks must not open the About window"
                 );
-                Ok(json!({"version":"0.14.0"}))
+                Ok(json!({"version":"0.15.0"}))
             }
             "ui.inspect" => Ok(json!({"tool":null,"dialog":null})),
             "ui.documents" => {

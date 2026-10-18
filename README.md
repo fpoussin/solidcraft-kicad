@@ -30,7 +30,7 @@ To build from source:
 - Rust 1.95 or later, Cargo, and a C compiler for upstream native dependencies.
 - KiCad 10's `kicad-cli` on `PATH`, its model libraries, and your usual KiCad path
   configuration.
-- SolidCraft **0.14.0** for live insertion. Offline builds use the pinned 0.14.0
+- SolidCraft **0.15.0** for live insertion. Offline builds use the pinned 0.15.0
   Rust engine and do not require the desktop application or `solidcraft-cli`.
 
 ```sh
@@ -38,11 +38,14 @@ cargo build --locked --release
 ./target/release/solidcraft-kicad --help
 ```
 
-The SolidCraft dependency and its required kernel patches are pinned to release
-commit `2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae`. `Cargo.lock` is committed. The
+The SolidCraft dependency and its required kernel patches use the `v0.15.0` Git
+tag. `Cargo.lock` records the resolved release commit for reproducible builds. The
 upstream crates include the CAD kernel; the first compilation is larger than a
 typical command-line utility. There is no runtime dependency on FreeCAD.
 README images use Git LFS; run `git lfs pull` if they are missing after cloning.
+
+Generated designs use SolidCraft file format 26 and require SolidCraft 0.15.0
+or later to open; SolidCraft 0.14.x and earlier cannot open them.
 
 ## Build a native part assembly
 
@@ -90,7 +93,7 @@ Metallic response and roughness are saved with the geometry. Thin board coatings
 are rendered opaque for clear silkscreen and predictable colours; component
 materials retain their exported opacity.
 A 0.1 mm outward silkscreen display offset keeps lettering visible in
-SolidCraft 0.14's viewport.
+SolidCraft's desktop viewport.
 
 Outer copper is plotted by KiCad and tessellated into flat surfaces, with a
 5 µm curve tolerance. Overlapping items are united, drill openings are subtracted,
@@ -166,13 +169,13 @@ Keep the intended assembly active until insertion completes. Finish active
 tools/dialogs, move the timeline to its end, and disable the agent cursor before
 inserting. Unsaved designs are supported. The companion snapshots the destination
 before staging and checks it again immediately before sending the insertion.
-SolidCraft 0.14.0 has no document-target precondition, so this check cannot lock
+The insertion request has no document-target precondition, so this check cannot lock
 the active tab against a concurrent switch.
 
 The new PCB is inserted at the design root and the current authoring component
 is preserved. Names receive numeric suffixes when required by existing component
-or instance labels. Names are selected before construction because 0.14.0 does
-not update occurrence labels when a component is renamed.
+or instance labels. Names are selected before construction so component names
+and occurrence labels stay consistent.
 
 All live mutations use one direct `engine.batch` with rollback enabled. Command
 failure restores the checkpoint; successful insertion follows SolidCraft's
@@ -303,8 +306,8 @@ python3 scripts/validate-desktop.py --app /path/to/SolidCraft.AppImage \
 ```
 
 A development benchmark with 323 placed parts and all default board details,
-including outer copper, converted in **7.29 s**. SolidCraft 0.14.0 opened the
-result in **1.60 s**, with its first render ready in **2.40 s** in the isolated
+including outer copper, converted in **7.17 s**. SolidCraft 0.15.0 opened the
+result in **1.67 s**, with its first render ready in **2.45 s** in the isolated
 desktop. The placed parts,
 including the board, share 42 geometry definitions. All board layers together
 use nine mesh bodies alongside the CAD substrate; the native file occupies

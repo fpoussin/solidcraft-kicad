@@ -18,22 +18,22 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 semver = "1"
 sha2 = "0.10"
-solidcraft-engine = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
-solidcraft-mcp = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
+solidcraft-engine = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.15.0" }
+solidcraft-mcp = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.15.0" }
 tempfile = "3"
 thiserror = "2"
 usvg = { version = "0.48.1", default-features = false }
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 wait-timeout = "0.2"
 
-# Upstream's kernel patches are part of the v0.14.0 dependency graph.
+# Upstream's kernel patches are part of the v0.15.0 dependency graph.
 # Cargo only applies patches from the top-level manifest.
 [patch.crates-io]
-truck-geometry = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
-truck-shapeops = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
-truck-stepio = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
-truck-meshalgo = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
-matext4cgmath = { git = "https://github.com/tangency-labs/solidcraft.git", rev = "2bb9c8106920d2e2ac92e9f9fa90af0de0bfcaae" }
+truck-geometry = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.15.0" }
+truck-shapeops = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.15.0" }
+truck-stepio = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.15.0" }
+truck-meshalgo = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.15.0" }
+matext4cgmath = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.15.0" }
 
 [profile.dev]
 debug = 0

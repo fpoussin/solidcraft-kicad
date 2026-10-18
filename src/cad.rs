@@ -9,6 +9,7 @@ use crate::{
 };
 
 pub const METADATA_KEY: &str = "org.solidcraft-kicad.imports";
+pub const SOLIDCRAFT_VERSION: &str = "0.15.0";
 
 pub fn execute(b: &mut dyn Backend, command: &str, params: Value) -> Result<Value> {
     b.call(
@@ -78,8 +79,7 @@ pub fn recipe(
         .flatten()
         .filter_map(|c| c["name"].as_str().map(str::to_string))
         .collect();
-    // 0.14.0 does not rename occurrence labels when their component is renamed.
-    // Reserve both component names and generated instance labels up front instead.
+    // Reserve both component names and generated instance labels up front.
     for component in components["components"].as_array().into_iter().flatten() {
         for occurrence in component["occurrences"].as_array().into_iter().flatten() {
             if let Some(name) = occurrence["name"]
@@ -271,9 +271,9 @@ pub struct Destination {
 pub fn destination(b: &mut dyn Backend) -> Result<Destination> {
     let about = b.call("ui.help", json!({})).map_err(Error::message)?;
     let version = about["version"].as_str().unwrap_or_default();
-    if version != "0.14.0" {
+    if version != SOLIDCRAFT_VERSION {
         return Err(Error::message(format!(
-            "SolidCraft 0.14.0 is required; app reported {version:?}"
+            "SolidCraft {SOLIDCRAFT_VERSION} is required; app reported {version:?}"
         )));
     }
     let ui = b.call("ui.inspect", json!({})).map_err(Error::message)?;

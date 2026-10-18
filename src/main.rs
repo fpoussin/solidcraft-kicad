@@ -211,7 +211,7 @@ fn run(cli: Cli) -> Result<Value> {
     Ok(json!({
         "result": result, "source": stage.inventory.source,
         "source_sha256": stage.inventory.sha256, "kicad_version": stage.kicad_version,
-        "solidcraft_version": "0.14.0", "assigned_models_complete": stage.omissions.is_empty(),
+        "solidcraft_version": cad::SOLIDCRAFT_VERSION, "assigned_models_complete": stage.omissions.is_empty(),
         "parts": stage.assets.iter().map(|a| &a.reference).collect::<Vec<_>>(),
         "model_prefix_overrides": settings.model_prefixes, "warnings": stage.warnings, "omissions": stage.omissions,
     }))
