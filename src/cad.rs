@@ -1,5 +1,6 @@
 use std::{collections::BTreeSet, path::Path};
 
+use semver::Version;
 use serde_json::{Value, json};
 use solidcraft_mcp::{Backend, Headless};
 
@@ -9,7 +10,7 @@ use crate::{
 };
 
 pub const METADATA_KEY: &str = "org.solidcraft-kicad.imports";
-pub const SOLIDCRAFT_VERSION: &str = "0.15.0";
+pub const SOLIDCRAFT_VERSION: Version = Version::new(0, 15, 0);
 
 pub fn execute(b: &mut dyn Backend, command: &str, params: Value) -> Result<Value> {
     b.call(
@@ -264,6 +265,7 @@ pub fn build_with_options(
 #[derive(Debug, PartialEq)]
 pub struct Destination {
     identity: Value,
+    pub version: String,
     pub inspect: Value,
     pub components: Value,
 }
@@ -271,9 +273,9 @@ pub struct Destination {
 pub fn destination(b: &mut dyn Backend) -> Result<Destination> {
     let about = b.call("ui.help", json!({})).map_err(Error::message)?;
     let version = about["version"].as_str().unwrap_or_default();
-    if version != SOLIDCRAFT_VERSION {
+    if !Version::parse(version).is_ok_and(|v| v >= SOLIDCRAFT_VERSION) {
         return Err(Error::message(format!(
-            "SolidCraft {SOLIDCRAFT_VERSION} is required; app reported {version:?}"
+            "SolidCraft {SOLIDCRAFT_VERSION} or later is required; app reported {version:?}"
         )));
     }
     let ui = b.call("ui.inspect", json!({})).map_err(Error::message)?;
@@ -308,6 +310,7 @@ pub fn destination(b: &mut dyn Backend) -> Result<Destination> {
     let identity = json!({"name": i["name"], "path": i["path"], "revision": i["revision"], "documents": docs, "components": components});
     Ok(Destination {
         identity,
+        version: version.to_string(),
         inspect: i,
         components,
     })

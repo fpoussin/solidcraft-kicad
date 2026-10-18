@@ -167,6 +167,10 @@ fn run(cli: Cli) -> Result<Value> {
         .map(|port| Remote::connect(&format!("127.0.0.1:{port}")))
         .transpose()?;
     let before = remote.as_mut().map(|b| cad::destination(b)).transpose()?;
+    let solidcraft_version = before.as_ref().map_or_else(
+        || cad::SOLIDCRAFT_VERSION.to_string(),
+        |destination| destination.version.clone(),
+    );
     let program = if input.kicad_cli.components().count() > 1 {
         std::path::absolute(&input.kicad_cli)?
     } else {
@@ -211,7 +215,7 @@ fn run(cli: Cli) -> Result<Value> {
     Ok(json!({
         "result": result, "source": stage.inventory.source,
         "source_sha256": stage.inventory.sha256, "kicad_version": stage.kicad_version,
-        "solidcraft_version": cad::SOLIDCRAFT_VERSION, "assigned_models_complete": stage.omissions.is_empty(),
+        "solidcraft_version": solidcraft_version, "assigned_models_complete": stage.omissions.is_empty(),
         "parts": stage.assets.iter().map(|a| &a.reference).collect::<Vec<_>>(),
         "model_prefix_overrides": settings.model_prefixes, "warnings": stage.warnings, "omissions": stage.omissions,
     }))

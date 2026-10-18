@@ -75,9 +75,7 @@ def main():
                 return call("engine.execute", {"command": command, "params": params or {}})
 
             version = call("ui.help")["version"]
-            if version != "0.15.0":
-                raise RuntimeError(f"expected SolidCraft 0.15.0, got {version}")
-            print("Isolated SolidCraft 0.15.0 ready", flush=True)
+            print(f"Isolated SolidCraft {version} ready", flush=True)
             if args.native:
                 started = time.perf_counter()
                 execute("doc.open", {"path": str(args.native.absolute())})

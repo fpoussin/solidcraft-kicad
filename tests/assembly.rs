@@ -1079,6 +1079,7 @@ fn failed_import_rolls_back_existing_geometry_and_history() -> Result<()> {
 
 struct App {
     inner: Headless,
+    version: &'static str,
     batches: usize,
     lose_reply: bool,
 }
@@ -1092,7 +1093,7 @@ impl Backend for App {
                     json!({}),
                     "version checks must not open the About window"
                 );
-                Ok(json!({"version":"0.15.0"}))
+                Ok(json!({"version":self.version}))
             }
             "ui.inspect" => Ok(json!({"tool":null,"dialog":null})),
             "ui.documents" => {
@@ -1121,11 +1122,46 @@ impl Backend for App {
 }
 
 #[test]
+fn live_version_check_accepts_newer_releases_and_rejects_older_or_invalid_versions() {
+    for (version, supported) in [
+        ("0.15.0", true),
+        ("0.15.0+local.1", true),
+        ("0.15.1", true),
+        ("0.16.0", true),
+        ("0.16.0-beta.1", true),
+        ("0.100.0", true),
+        ("1.0.0", true),
+        ("10.0.0", true),
+        ("0.9.99", false),
+        ("0.14.99", false),
+        ("0.15.0-rc.1", false),
+        ("0.15", false),
+        ("invalid", false),
+        ("", false),
+    ] {
+        let mut app = App {
+            inner: Headless::default(),
+            version,
+            batches: 0,
+            lose_reply: false,
+        };
+        let result = cad::destination(&mut app);
+        assert_eq!(result.is_ok(), supported, "{version:?}: {result:?}");
+        assert_eq!(app.batches, 0);
+        match result {
+            Ok(destination) => assert_eq!(destination.version, version),
+            Err(error) => assert!(error.to_string().contains("0.15.0 or later is required")),
+        }
+    }
+}
+
+#[test]
 #[cfg(unix)]
 fn live_recipe_handles_name_collisions_without_changing_author_context() -> Result<()> {
     let (_dir, mut stage) = fixture(false)?;
     let mut app = App {
         inner: Headless::default(),
+        version: "0.16.0",
         batches: 0,
         lose_reply: false,
     };
@@ -1155,6 +1191,7 @@ fn destination_changes_abort_and_lost_replies_are_never_replayed() -> Result<()>
     let (_dir, mut stage) = fixture(false)?;
     let mut app = App {
         inner: Headless::default(),
+        version: "0.15.0",
         batches: 0,
         lose_reply: false,
     };

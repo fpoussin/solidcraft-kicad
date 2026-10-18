@@ -30,8 +30,8 @@ To build from source:
 - Rust 1.95 or later, Cargo, and a C compiler for upstream native dependencies.
 - KiCad 10's `kicad-cli` on `PATH`, its model libraries, and your usual KiCad path
   configuration.
-- SolidCraft **0.15.0** for live insertion. Offline builds use the pinned 0.15.0
-  Rust engine and do not require the desktop application or `solidcraft-cli`.
+- SolidCraft **0.15.0 or later** for live insertion. Offline builds use the pinned
+  0.15.0 Rust engine and do not require the desktop application or `solidcraft-cli`.
 
 ```sh
 cargo build --locked --release
