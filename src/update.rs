@@ -1,4 +1,4 @@
-//! Best-effort release notifications. The CLI only enables this in release builds.
+//! Best-effort background notifications and explicit, uncached release checks.
 use std::{
     fs,
     io::Read,
@@ -13,13 +13,77 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 
 const INTERVAL: u64 = 24 * 60 * 60;
-const RELEASES: &str = "https://github.com/fpoussin/solidcraft-kicad/releases";
+const DOWNLOAD: &str = "https://github.com/fpoussin/solidcraft-kicad/releases/latest";
 const API: &str = "https://api.github.com/repos/fpoussin/solidcraft-kicad/releases/latest";
 
 #[derive(Deserialize, Serialize)]
 struct Cache {
     checked_at: u64,
     latest: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct Report {
+    current: String,
+    latest: String,
+    update_available: bool,
+    download_url: &'static str,
+}
+
+impl Report {
+    pub fn message(&self) -> String {
+        if self.update_available {
+            format!(
+                "Update available: solidcraft-kicad {} (current {}).\nDownload: {}",
+                self.latest, self.current, self.download_url
+            )
+        } else {
+            format!(
+                "solidcraft-kicad {} is up to date (latest stable: {}).",
+                self.current, self.latest
+            )
+        }
+    }
+}
+
+/// Unlike background notifications, an explicit check waits and reports errors.
+pub fn force() -> Result<Report, String> {
+    force_at(
+        cache_path().as_deref(),
+        now(),
+        env!("CARGO_PKG_VERSION"),
+        fetch_latest,
+    )
+}
+
+fn force_at(
+    path: Option<&Path>,
+    checked_at: u64,
+    current: &str,
+    fetch: impl FnOnce() -> Result<Version, String>,
+) -> Result<Report, String> {
+    let latest = fetch()?;
+    let current_version = Version::parse(current).map_err(|e| e.to_string())?;
+    if let Some(path) = path {
+        let _ = write_cache(
+            path,
+            &Cache {
+                checked_at,
+                latest: Some(latest.to_string()),
+            },
+        );
+    }
+    Ok(Report {
+        current: current.into(),
+        latest: latest.to_string(),
+        update_available: latest.cmp_precedence(&current_version).is_gt(),
+        download_url: DOWNLOAD,
+    })
+}
+
+fn cache_path() -> Option<PathBuf> {
+    ProjectDirs::from("", "", "solidcraft-kicad")
+        .map(|dirs| dirs.cache_dir().join("release-check.json"))
 }
 
 pub struct Check {
@@ -29,12 +93,9 @@ pub struct Check {
 
 impl Check {
     pub fn start(enabled: bool) -> Self {
-        let path = enabled
-            .then(|| ProjectDirs::from("", "", "solidcraft-kicad"))
-            .flatten()
-            .map(|dirs| dirs.cache_dir().join("release-check.json"));
+        let path = enabled.then(cache_path).flatten();
         match path {
-            Some(path) => Self::start_at(path, now(), fetch_latest),
+            Some(path) => Self::start_at(path, now(), || fetch_latest().ok()),
             None => Self {
                 cached: None,
                 pending: None,
@@ -104,7 +165,7 @@ impl Check {
     pub fn notify(self) {
         if let Some(latest) = self.available(env!("CARGO_PKG_VERSION")) {
             eprintln!(
-                "Update available: solidcraft-kicad {latest} (current {}).\nDownload: {RELEASES}/latest",
+                "Update available: solidcraft-kicad {latest} (current {}).\nDownload: {DOWNLOAD}",
                 env!("CARGO_PKG_VERSION")
             );
         }
@@ -137,7 +198,7 @@ fn parse_release(body: &str) -> Option<Version> {
     stable_version(&release.tag_name)
 }
 
-fn fetch_latest() -> Option<Version> {
+fn fetch_latest() -> Result<Version, String> {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(2)))
         .https_only(true)
@@ -148,13 +209,13 @@ fn fetch_latest() -> Option<Version> {
         .get(API)
         .header("Accept", "application/vnd.github+json")
         .call()
-        .ok()?
+        .map_err(|error| format!("cannot check GitHub for updates: {error}"))?
         .body_mut()
         .with_config()
         .limit(64 * 1024)
         .read_to_string()
-        .ok()?;
-    parse_release(&body)
+        .map_err(|error| format!("cannot read GitHub release response: {error}"))?;
+    parse_release(&body).ok_or_else(|| "GitHub returned no valid stable release".into())
 }
 
 fn read_cache(path: &Path) -> Option<Cache> {
@@ -213,6 +274,76 @@ mod tests {
         }
         assert!(parse_release("not JSON").is_none());
         assert!(parse_release("{}").is_none());
+    }
+
+    #[test]
+    fn forced_check_bypasses_fresh_cache_and_refreshes_it() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("release-check.json");
+        write_cache(
+            &path,
+            &Cache {
+                checked_at: 100,
+                latest: Some("99.0.0".into()),
+            },
+        )
+        .ok_or("cannot seed cache")?;
+        let mut calls = 0;
+        let report = force_at(Some(&path), 101, "0.2.0", || {
+            calls += 1;
+            Ok(Version::new(0, 3, 0))
+        })?;
+        assert_eq!(calls, 1);
+        assert_eq!(report.latest, "0.3.0");
+        assert!(report.update_available);
+        let cache = read_cache(&path).ok_or("missing refreshed cache")?;
+        assert_eq!(cache.checked_at, 101);
+        assert_eq!(cache.latest.as_deref(), Some("0.3.0"));
+        Ok(())
+    }
+
+    #[test]
+    fn forced_check_reports_failure_instead_of_using_a_cached_release()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("release-check.json");
+        write_cache(
+            &path,
+            &Cache {
+                checked_at: 100,
+                latest: Some("99.0.0".into()),
+            },
+        )
+        .ok_or("cannot seed cache")?;
+        let result = force_at(Some(&path), 101, "0.2.0", || Err("offline".into()));
+        assert_eq!(result.err().as_deref(), Some("offline"));
+        let cache = read_cache(&path).ok_or("missing previous cache")?;
+        assert_eq!(cache.checked_at, 100);
+        assert_eq!(cache.latest.as_deref(), Some("99.0.0"));
+        Ok(())
+    }
+
+    #[test]
+    fn forced_check_explains_current_status_and_ignores_build_metadata()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for (latest, expected) in [
+            ("0.3.0", true),
+            ("0.2.0", false),
+            ("0.2.0+build.1", false),
+            ("0.1.0", false),
+        ] {
+            let report = force_at(None, 100, "0.2.0", || {
+                Version::parse(latest).map_err(|e| e.to_string())
+            })?;
+            assert_eq!(report.update_available, expected);
+            assert!(report.message().contains(if expected {
+                "Update available"
+            } else {
+                "up to date"
+            }));
+        }
+        Ok(())
     }
 
     #[test]

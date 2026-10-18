@@ -16,15 +16,18 @@ use solidcraft_kicad::{
 };
 use solidcraft_mcp::Remote;
 
-#[cfg(any(test, not(debug_assertions)))]
 mod update;
 
 #[derive(Parser)]
 #[command(
     version,
+    arg_required_else_help = true,
     about = "Import KiCad PCBs as native SolidCraft component assemblies"
 )]
 struct Cli {
+    /// Check GitHub for updates now, ignoring the daily cache, then exit.
+    #[arg(long, global = true, conflicts_with = "no_update_check")]
+    check_update: bool,
     /// Disable the release-build update check (interactive terminals only).
     #[arg(long, global = true)]
     no_update_check: bool,
@@ -35,7 +38,7 @@ struct Cli {
     #[arg(long, global = true, requires = "json")]
     measure: bool,
     #[command(subcommand)]
-    command: Action,
+    command: Option<Action>,
 }
 
 #[derive(Subcommand)]
@@ -107,7 +110,10 @@ struct Input {
 
 fn run(cli: Cli) -> Result<Value> {
     let measure = cli.measure;
-    let (input, output, port, force, layers) = match cli.command {
+    let command = cli
+        .command
+        .ok_or_else(|| Error::message("choose build or insert, or use --check-update"))?;
+    let (input, output, port, force, layers) = match command {
         Action::Build {
             input,
             output,
@@ -249,11 +255,25 @@ fn confirm_overwrite(output: &Path, force: bool) -> Result<bool> {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    #[cfg(not(debug_assertions))]
-    let updates =
-        update::Check::start(!cli.no_update_check && !cli.json && io::stderr().is_terminal());
+    let updates = update::Check::start(
+        !cfg!(debug_assertions)
+            && !cli.check_update
+            && !cli.no_update_check
+            && !cli.json
+            && io::stderr().is_terminal(),
+    );
     let print_json = cli.json;
-    let status = match run(cli) {
+    let result = if cli.check_update {
+        update::force().map_err(Error::message).and_then(|report| {
+            if !print_json {
+                println!("{}", report.message());
+            }
+            Ok(serde_json::to_value(report)?)
+        })
+    } else {
+        run(cli)
+    };
+    let status = match result {
         Ok(report) if print_json => match serde_json::to_string_pretty(&report) {
             Ok(text) => {
                 println!("{text}");
@@ -270,7 +290,29 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     };
-    #[cfg(not(debug_assertions))]
     updates.notify();
     status
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn forced_update_check_needs_no_board_or_subcommand() -> Result<()> {
+        let cli = Cli::try_parse_from(["solidcraft-kicad", "--check-update", "--json"])
+            .map_err(|error| Error::message(error.to_string()))?;
+        assert!(cli.check_update && cli.json && cli.command.is_none());
+        assert!(Cli::try_parse_from(["solidcraft-kicad"]).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn forced_check_conflicts_with_disabled_checks() {
+        let result =
+            Cli::try_parse_from(["solidcraft-kicad", "--check-update", "--no-update-check"]);
+        assert!(
+            matches!(result, Err(error) if error.kind() == clap::error::ErrorKind::ArgumentConflict)
+        );
+    }
 }

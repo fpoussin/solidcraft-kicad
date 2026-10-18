@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add `--check-update` to check GitHub immediately, bypassing the daily cache,
+  without a PCB. Supports JSON output and reports explicit check failures.
 - Isolate KiCad subprocess temporary files so concurrent exports do not race
   on the CLI instance lock or emit invalid-lock warnings.
 

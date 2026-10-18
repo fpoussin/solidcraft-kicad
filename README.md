@@ -77,10 +77,24 @@ solidcraft-kicad build path/to/board.kicad_pcb --json
 
 Release builds check GitHub for newer stable releases in the background, at most
 once a day, and show an update notice on interactive stderr after the command.
-Checks never delay conversion; offline failures are silent. Debug builds,
-`--json`, redirected stderr, and `--help`/`--version` do not check for updates.
+Automatic checks never delay conversion; offline failures are silent. They are
+disabled for debug builds, `--json`, redirected stderr, and `--help`/`--version`.
 Use `--no-update-check` to disable checking and notices. The cache is stored in
 the platform's user cache directory under `solidcraft-kicad`.
+
+To check immediately, ignoring the daily cache, run:
+
+```sh
+solidcraft-kicad --check-update
+solidcraft-kicad --check-update --json
+```
+
+This checks and exits without a PCB or conversion. It works in debug builds and
+redirected output too, waits for the bounded request, and reports either a newer
+release or that you are up to date. An unsuccessful explicit check reports an
+error and exits unsuccessfully. `--json` prints the current and latest versions,
+whether an update is available, and the download URL. It cannot be combined with
+`--no-update-check`.
 
 Builds include front and back silkscreen, soldermask with its openings, pads,
 plated holes, and outer copper tracks, vias and filled zones by default.
