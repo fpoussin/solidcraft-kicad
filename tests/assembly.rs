@@ -884,6 +884,57 @@ fn native_parts_reopen_without_assets_and_move_together() -> Result<()> {
 
 #[test]
 #[cfg(unix)]
+fn concurrent_exports_use_private_temporary_directories() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (dir, _stage) = fixture(false)?;
+    let program = dir.path().join("fake-kicad");
+    std::fs::rename(&program, dir.path().join("fake-kicad-exporter"))?;
+    std::fs::write(
+        dir.path().join("shared-temp"),
+        std::env::temp_dir().to_string_lossy().as_bytes(),
+    )?;
+    std::fs::write(
+        &program,
+        r##"#!/bin/sh
+directory="$(dirname "$0")"
+if [ "$TMPDIR" = "$(cat "$directory/shared-temp")" ]; then
+  printf "%s\n" "11:36:45: Warning: Invalid lock file '/tmp/user/1000/org.kicad.kicad/instances/kicad-cli-10.0'." >&2
+fi
+[ "$TMPDIR" = "$TMP" ] && [ "$TMPDIR" = "$TEMP" ] || exit 1
+printf '%s\n' "$TMPDIR" >> "$directory/runtime-calls"
+if [ "$1" != version ]; then
+  printf 'Warning: Keep genuine exporter diagnostics\n' >&2
+fi
+exec "$directory/fake-kicad-exporter" "$@"
+"##,
+    )?;
+    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700))?;
+    let settings = Settings::default();
+    let stage = Exporter {
+        program: &program,
+        timeout: Duration::from_secs(5),
+        settings: &settings,
+    }
+    .stage_build(inventory::read(&dir.path().join("board.txt"))?, false)?;
+    assert_eq!(stage.kicad_version, "10.0.7");
+    assert!(
+        stage
+            .warnings
+            .iter()
+            .all(|w| !w.contains("Invalid lock file"))
+    );
+    assert!(stage.warnings.iter().any(|w| w.contains("Keep genuine")));
+    let calls = std::fs::read_to_string(dir.path().join("runtime-calls"))?;
+    let paths: std::collections::BTreeSet<_> = calls.lines().collect();
+    assert!(paths.len() > 1);
+    assert_eq!(paths.len(), calls.lines().count());
+    assert!(paths.iter().all(|path| !Path::new(path).exists()));
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
 fn cli_build_is_quiet_by_default_and_json_is_opt_in() -> Result<()> {
     let (dir, _stage) = fixture(false)?;
     let working_dir = tempfile::tempdir()?;

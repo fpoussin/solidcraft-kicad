@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Isolate KiCad subprocess temporary files so concurrent exports do not race
+  on the CLI instance lock or emit invalid-lock warnings.
+
 ## 0.2.0
 
 - Upgrade the embedded SolidCraft engine, control client and matching kernel

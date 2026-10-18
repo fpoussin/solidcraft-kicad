@@ -95,12 +95,20 @@ impl Exporter<'_> {
         log: &Path,
     ) -> Result<(bool, String)> {
         let out = File::create(log)?;
+        // KiCad's instance lock lives under the platform temporary directory.
+        // Concurrent exports need separate directories to avoid racing on it.
+        let runtime = tempfile::Builder::new()
+            .prefix("solidcraft-kicad-runtime-")
+            .tempdir()?;
         let mut command = Command::new(self.program);
         command
             .args(args)
             .current_dir(directory)
             .env("LC_ALL", "C")
             .env("LANG", "C")
+            .env("TMPDIR", runtime.path())
+            .env("TMP", runtime.path())
+            .env("TEMP", runtime.path())
             .stdin(Stdio::null())
             .stdout(out.try_clone()?)
             .stderr(out);
