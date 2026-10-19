@@ -6,6 +6,10 @@ rust-version = "1.95"
 license = "MIT OR Apache-2.0"
 description = "Import KiCad PCBs as native SolidCraft component assemblies"
 
+[package.metadata.solidcraft]
+# First desktop release that reads the embedded engine's native format.
+minimum-version = "0.16.0"
+
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 directories = "6"
@@ -18,22 +22,26 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 semver = "1"
 sha2 = "0.10"
-solidcraft-engine = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.15.0" }
-solidcraft-mcp = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.15.0" }
+solidcraft-engine = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.16.2" }
+solidcraft-mcp = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.16.2" }
 tempfile = "3"
 thiserror = "2"
 usvg = { version = "0.48.1", default-features = false }
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 wait-timeout = "0.2"
 
-# Upstream's kernel patches are part of the v0.15.0 dependency graph.
+[build-dependencies]
+semver = "1"
+toml = "1"
+
+# Upstream's kernel patches must match the engine release tag.
 # Cargo only applies patches from the top-level manifest.
 [patch.crates-io]
-truck-geometry = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.15.0" }
-truck-shapeops = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.15.0" }
-truck-stepio = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.15.0" }
-truck-meshalgo = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.15.0" }
-matext4cgmath = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.15.0" }
+matext4cgmath = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.16.2" }
+truck-geometry = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.16.2" }
+truck-meshalgo = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.16.2" }
+truck-shapeops = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.16.2" }
+truck-stepio = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.16.2" }
 
 [profile.dev]
 debug = 0

@@ -30,22 +30,26 @@ To build from source:
 - Rust 1.95 or later, Cargo, and a C compiler for upstream native dependencies.
 - KiCad 10's `kicad-cli` on `PATH`, its model libraries, and your usual KiCad path
   configuration.
-- SolidCraft **0.15.0 or later** for live insertion. Offline builds use the pinned
-  0.15.0 Rust engine and do not require the desktop application or `solidcraft-cli`.
+- A compatible SolidCraft desktop for opening files or live insertion, as shown
+  below. Offline builds need neither the desktop application nor `solidcraft-cli`.
 
 ```sh
 cargo build --locked --release
 ./target/release/solidcraft-kicad --help
 ```
 
-The SolidCraft dependency and its required kernel patches use the `v0.15.0` Git
-tag. `Cargo.lock` records the resolved release commit for reproducible builds. The
+The SolidCraft dependency and its required kernel patches share a Git release
+tag in `Cargo.toml`. `Cargo.lock` records the resolved commit for reproducible
+builds. The
 upstream crates include the CAD kernel; the first compilation is larger than a
 typical command-line utility. There is no runtime dependency on FreeCAD.
 README images use Git LFS; run `git lfs pull` if they are missing after cloning.
 
-Generated designs use SolidCraft file format 26 and require SolidCraft 0.15.0
-or later to open; SolidCraft 0.14.x and earlier cannot open them.
+<!-- solidcraft-compatibility:begin -->
+Offline builds embed SolidCraft **0.16.2** (`v0.16.2`).
+Generated designs use file format **27** and require
+**SolidCraft 0.16.0 or later** for opening and live insertion.
+<!-- solidcraft-compatibility:end -->
 
 ## Build a native part assembly
 
@@ -320,8 +324,8 @@ python3 scripts/validate-desktop.py --app /path/to/SolidCraft.AppImage \
 ```
 
 A development benchmark with 323 placed parts and all default board details,
-including outer copper, converted in **7.17 s**. SolidCraft 0.15.0 opened the
-result in **1.67 s**, with its first render ready in **2.45 s** in the isolated
+including outer copper, converted in **7.54 s**. SolidCraft 0.16.2 opened the
+result in **1.74 s**, with its first render ready in **2.52 s** in the isolated
 desktop. The placed parts,
 including the board, share 42 geometry definitions. All board layers together
 use nine mesh bodies alongside the CAD substrate; the native file occupies
@@ -332,10 +336,32 @@ development machine, excluding application startup.
 No KiCad source files are rewritten. KiCad itself can create local `.kicad_prl`
 preferences when loading a project that has none.
 
+To upgrade the embedded SolidCraft release, use Python 3.11+ and an authenticated
+GitHub CLI:
+
+```sh
+python3 scripts/update_solidcraft.py --validate
+```
+
+The command selects the latest stable upstream release, updates every coupled
+Git tag, discovers the required kernel patches from the resolved dependency
+graph, refreshes the lockfile and compatibility block above, and adds a changelog
+entry. `--tag` selects a specific release. `--validate` runs formatting, Clippy,
+tests and a release build; real-board and desktop checks still use the workflow
+above.
+
+The engine version comes from `Cargo.lock`; the native format comes from the
+linked engine. The only manual compatibility policy is `minimum-version` in
+`[package.metadata.solidcraft]`. When the native format changes, the command
+requires `--minimum-version` with the first compatible desktop release from
+upstream's compatibility notes. Failed or interrupted upgrades restore the
+manifest, lockfile, README and changelog. Builds reject mixed upstream tags or
+revisions, and tests check the documented versions and format against the engine.
+
 ## Releases
 
 Pull requests and pushes to `master` run the **CI** workflow: formatting, Clippy,
-release-packaging unit tests, and release-mode tests on Linux x64, macOS arm64
+maintenance-script tests, and release-mode tests on Linux x64, macOS arm64
 and Windows x64. These runs do not create release archives or publish releases.
 
 Version-tag pushes (`v*`) run the **Release** workflow. It reuses the same CI

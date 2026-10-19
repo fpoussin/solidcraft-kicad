@@ -972,7 +972,7 @@ fn cli_build_is_quiet_by_default_and_json_is_opt_in() -> Result<()> {
         assert!(!board.with_extension("solidcraft").exists());
         if report {
             let value: Value = serde_json::from_slice(&result.stdout)?;
-            assert_eq!(value["solidcraft_version"], "0.15.0");
+            assert_eq!(value["solidcraft_version"], cad::SOLIDCRAFT_VERSION);
             assert_eq!(value["result"]["output"], json!(output));
             assert_eq!(value["result"]["measurement"]["body_count"], 3);
             assert_eq!(value["parts"], json!(["PCB", "R1", "U1"]));
@@ -1130,7 +1130,7 @@ fn failed_import_rolls_back_existing_geometry_and_history() -> Result<()> {
 
 struct App {
     inner: Headless,
-    version: &'static str,
+    version: String,
     batches: usize,
     lose_reply: bool,
 }
@@ -1173,26 +1173,53 @@ impl Backend for App {
 }
 
 #[test]
-fn live_version_check_accepts_newer_releases_and_rejects_older_or_invalid_versions() {
-    for (version, supported) in [
-        ("0.15.0", true),
-        ("0.15.0+local.1", true),
-        ("0.15.1", true),
-        ("0.16.0", true),
-        ("0.16.0-beta.1", true),
-        ("0.100.0", true),
-        ("1.0.0", true),
-        ("10.0.0", true),
-        ("0.9.99", false),
-        ("0.14.99", false),
-        ("0.15.0-rc.1", false),
-        ("0.15", false),
-        ("invalid", false),
-        ("", false),
-    ] {
+fn live_version_check_accepts_newer_releases_and_rejects_older_or_invalid_versions() -> Result<()> {
+    let minimum = semver::Version::parse(cad::MIN_SOLIDCRAFT_VERSION)
+        .map_err(|e| Error::message(e.to_string()))?;
+    let next_minor = semver::Version::new(minimum.major, minimum.minor + 1, 0);
+    let mut cases = vec![
+        (minimum.to_string(), true),
+        (format!("{minimum}+local.1"), true),
+        (cad::SOLIDCRAFT_VERSION.into(), true),
+        (
+            semver::Version::new(minimum.major, minimum.minor, minimum.patch + 1).to_string(),
+            true,
+        ),
+        (next_minor.to_string(), true),
+        (format!("{next_minor}-beta.1"), true),
+        (
+            semver::Version::new(minimum.major, minimum.minor + 100, 0).to_string(),
+            true,
+        ),
+        (
+            semver::Version::new(minimum.major + 1, 0, 0).to_string(),
+            true,
+        ),
+        (format!("{minimum}-rc.1"), false),
+        (format!("{}.{}", minimum.major, minimum.minor), false),
+        ("invalid".into(), false),
+        (String::new(), false),
+    ];
+    if minimum.patch > 0 {
+        cases.push((
+            semver::Version::new(minimum.major, minimum.minor, minimum.patch - 1).to_string(),
+            false,
+        ));
+    } else if minimum.minor > 0 {
+        cases.push((
+            semver::Version::new(minimum.major, minimum.minor - 1, 999).to_string(),
+            false,
+        ));
+    } else if minimum.major > 0 {
+        cases.push((
+            semver::Version::new(minimum.major - 1, 999, 999).to_string(),
+            false,
+        ));
+    }
+    for (version, supported) in cases {
         let mut app = App {
             inner: Headless::default(),
-            version,
+            version: version.clone(),
             batches: 0,
             lose_reply: false,
         };
@@ -1201,18 +1228,51 @@ fn live_version_check_accepts_newer_releases_and_rejects_older_or_invalid_versio
         assert_eq!(app.batches, 0);
         match result {
             Ok(destination) => assert_eq!(destination.version, version),
-            Err(error) => assert!(error.to_string().contains("0.15.0 or later is required")),
+            Err(error) => assert!(
+                error
+                    .to_string()
+                    .contains(&format!("{minimum} or later is required"))
+            ),
         }
     }
+    Ok(())
+}
+
+#[test]
+fn engine_metadata_and_documented_compatibility_match_the_linked_engine() -> Result<()> {
+    let mut backend = Headless::default();
+    let script = cad::execute(&mut backend, "timeline.export_script", json!({}))?;
+    assert_eq!(
+        script["script"]["about"]["version"],
+        cad::SOLIDCRAFT_VERSION
+    );
+    let block = include_str!("../README.md")
+        .split_once("<!-- solidcraft-compatibility:begin -->")
+        .and_then(|(_, rest)| rest.split_once("<!-- solidcraft-compatibility:end -->"))
+        .map(|(block, _)| block)
+        .ok_or_else(|| Error::message("missing README compatibility block"))?;
+    for expected in [
+        format!("**{}**", cad::SOLIDCRAFT_VERSION),
+        format!("format **{}**", cad::SOLIDCRAFT_FORMAT),
+        format!("SolidCraft {} or later", cad::MIN_SOLIDCRAFT_VERSION),
+    ] {
+        assert!(
+            block.contains(&expected),
+            "README is out of date: {expected}"
+        );
+    }
+    Ok(())
 }
 
 #[test]
 #[cfg(unix)]
 fn live_recipe_handles_name_collisions_without_changing_author_context() -> Result<()> {
     let (_dir, mut stage) = fixture(false)?;
+    let engine = semver::Version::parse(cad::SOLIDCRAFT_VERSION)
+        .map_err(|e| Error::message(e.to_string()))?;
     let mut app = App {
         inner: Headless::default(),
-        version: "0.16.0",
+        version: semver::Version::new(engine.major, engine.minor + 1, 0).to_string(),
         batches: 0,
         lose_reply: false,
     };
@@ -1242,7 +1302,7 @@ fn destination_changes_abort_and_lost_replies_are_never_replayed() -> Result<()>
     let (_dir, mut stage) = fixture(false)?;
     let mut app = App {
         inner: Headless::default(),
-        version: "0.15.0",
+        version: cad::SOLIDCRAFT_VERSION.into(),
         batches: 0,
         lose_reply: false,
     };

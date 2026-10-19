@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Upgrade the embedded SolidCraft engine, control client and matching kernel
+  patches to the `v0.16.2` Git tag. Generated assemblies use file format 27 and
+  require SolidCraft 0.16.0 or newer for opening and live insertion.
+- Add `scripts/update_solidcraft.py` to update coupled tags, discover kernel
+  patches, refresh compatibility documentation and validate upgrades. Derive
+  engine metadata automatically and reject mismatched tags/revisions at build time.
 - Add `--check-update` to check GitHub immediately, bypassing the daily cache,
   without a PCB. Supports JSON output and reports explicit check failures.
 - Isolate KiCad subprocess temporary files so concurrent exports do not race

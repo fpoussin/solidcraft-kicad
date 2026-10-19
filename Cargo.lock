@@ -1053,7 +1053,7 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 [[package]]
 name = "matext4cgmath"
 version = "0.1.0"
-source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.15.0#fa691707c224cae580c42201ed3a22d5e4b8c716"
+source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.16.2#5de48e916df2d659586a36b15c90ed05293a0954"
 dependencies = [
  "cgmath",
  "katexit",
@@ -1639,8 +1639,8 @@ checksum = "5b3dc8af474f516a851ff4bd12db780f948b9250ad37211e4eec0bccea54e01b"
 
 [[package]]
 name = "solidcraft-derive"
-version = "0.15.0"
-source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.15.0#fa691707c224cae580c42201ed3a22d5e4b8c716"
+version = "0.16.2"
+source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.16.2#5de48e916df2d659586a36b15c90ed05293a0954"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1649,8 +1649,8 @@ dependencies = [
 
 [[package]]
 name = "solidcraft-doc"
-version = "0.15.0"
-source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.15.0#fa691707c224cae580c42201ed3a22d5e4b8c716"
+version = "0.16.2"
+source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.16.2#5de48e916df2d659586a36b15c90ed05293a0954"
 dependencies = [
  "log",
  "serde",
@@ -1667,8 +1667,8 @@ dependencies = [
 
 [[package]]
 name = "solidcraft-engine"
-version = "0.15.0"
-source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.15.0#fa691707c224cae580c42201ed3a22d5e4b8c716"
+version = "0.16.2"
+source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.16.2#5de48e916df2d659586a36b15c90ed05293a0954"
 dependencies = [
  "log",
  "serde",
@@ -1685,8 +1685,8 @@ dependencies = [
 
 [[package]]
 name = "solidcraft-geom"
-version = "0.15.0"
-source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.15.0#fa691707c224cae580c42201ed3a22d5e4b8c716"
+version = "0.16.2"
+source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.16.2#5de48e916df2d659586a36b15c90ed05293a0954"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
@@ -1694,8 +1694,8 @@ dependencies = [
 
 [[package]]
 name = "solidcraft-io"
-version = "0.15.0"
-source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.15.0#fa691707c224cae580c42201ed3a22d5e4b8c716"
+version = "0.16.2"
+source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.16.2#5de48e916df2d659586a36b15c90ed05293a0954"
 dependencies = [
  "cadmpeg-core",
  "cadmpeg-ir",
@@ -1715,8 +1715,8 @@ dependencies = [
 
 [[package]]
 name = "solidcraft-kernel"
-version = "0.15.0"
-source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.15.0#fa691707c224cae580c42201ed3a22d5e4b8c716"
+version = "0.16.2"
+source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.16.2#5de48e916df2d659586a36b15c90ed05293a0954"
 dependencies = [
  "log",
  "rayon",
@@ -1752,6 +1752,7 @@ dependencies = [
  "solidcraft-mcp",
  "tempfile",
  "thiserror 2.0.21",
+ "toml 1.1.8+spec-1.1.0",
  "ureq",
  "usvg",
  "wait-timeout",
@@ -1759,8 +1760,8 @@ dependencies = [
 
 [[package]]
 name = "solidcraft-mcp"
-version = "0.15.0"
-source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.15.0#fa691707c224cae580c42201ed3a22d5e4b8c716"
+version = "0.16.2"
+source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.16.2#5de48e916df2d659586a36b15c90ed05293a0954"
 dependencies = [
  "serde_json",
  "solidcraft-engine",
@@ -1768,8 +1769,8 @@ dependencies = [
 
 [[package]]
 name = "solidcraft-render"
-version = "0.15.0"
-source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.15.0#fa691707c224cae580c42201ed3a22d5e4b8c716"
+version = "0.16.2"
+source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.16.2#5de48e916df2d659586a36b15c90ed05293a0954"
 dependencies = [
  "image",
  "moxcms",
@@ -1782,8 +1783,8 @@ dependencies = [
 
 [[package]]
 name = "solidcraft-sketch"
-version = "0.15.0"
-source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.15.0#fa691707c224cae580c42201ed3a22d5e4b8c716"
+version = "0.16.2"
+source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.16.2#5de48e916df2d659586a36b15c90ed05293a0954"
 dependencies = [
  "serde",
  "solidcraft-geom",
@@ -2037,7 +2038,7 @@ dependencies = [
 [[package]]
 name = "truck-geometry"
 version = "0.5.0"
-source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.15.0#fa691707c224cae580c42201ed3a22d5e4b8c716"
+source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.16.2#5de48e916df2d659586a36b15c90ed05293a0954"
 dependencies = [
  "serde",
  "thiserror 1.0.69",
@@ -2061,7 +2062,7 @@ dependencies = [
 [[package]]
 name = "truck-meshalgo"
 version = "0.4.0"
-source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.15.0#fa691707c224cae580c42201ed3a22d5e4b8c716"
+source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.16.2#5de48e916df2d659586a36b15c90ed05293a0954"
 dependencies = [
  "array-macro",
  "derive_more",
@@ -2112,7 +2113,7 @@ dependencies = [
 [[package]]
 name = "truck-shapeops"
 version = "0.4.0"
-source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.15.0#fa691707c224cae580c42201ed3a22d5e4b8c716"
+source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.16.2#5de48e916df2d659586a36b15c90ed05293a0954"
 dependencies = [
  "derive_more",
  "itertools",
@@ -2127,7 +2128,7 @@ dependencies = [
 [[package]]
 name = "truck-stepio"
 version = "0.3.0"
-source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.15.0#fa691707c224cae580c42201ed3a22d5e4b8c716"
+source = "git+https://github.com/tangency-labs/solidcraft.git?tag=v0.16.2#5de48e916df2d659586a36b15c90ed05293a0954"
 dependencies = [
  "chrono",
  "truck-geometry",
