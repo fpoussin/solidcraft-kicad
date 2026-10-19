@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0
+
 - Package release archives in main-branch CI. Tag releases wait for successful
   CI on the same commit and publish its verified artifacts without rebuilding,
   allowing the commit and signed version tag to be pushed together.
