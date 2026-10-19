@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Package release archives in main-branch CI. Tag releases wait for successful
+  CI on the same commit and publish its verified artifacts without rebuilding,
+  allowing the commit and signed version tag to be pushed together.
 - Bundle the MIT-licensed pico-ice Rev3 demo PCB with verified provenance,
   a pinned model downloader, and real KiCad conversion/reopening tests in Linux CI.
 - Upgrade the embedded SolidCraft engine, control client and matching kernel

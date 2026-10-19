@@ -123,20 +123,31 @@ def package(target):
     print(archive)
 
 
-def prepare(tag):
+def prepare(tag, commit):
     validate_tag(tag)
     expected = {
-        f"solidcraft-kicad-{tag}-{target}.{'zip' if target.endswith('windows-msvc') else 'tar.gz'}"
+        f"solidcraft-kicad-{tag}-{target}.{'zip' if target.endswith('windows-msvc') else 'tar.gz'}": target
         for target in TARGETS
     }
     actual = {p.name for p in OUTPUT.iterdir() if p.name.endswith((".zip", ".tar.gz"))}
-    if actual != expected:
-        raise ValueError(f"release archives do not match: expected {expected}, found {actual}")
+    if actual != set(expected):
+        raise ValueError(f"release archives do not match: expected {set(expected)}, found {actual}")
     checksums = []
     for name in sorted(expected):
         path = OUTPUT / name
         if path.stat().st_size == 0:
             raise ValueError(f"empty release archive: {name}")
+        # Archives came from another run. Verify their embedded identity before
+        # publishing any of them, without extracting executable content.
+        base = f"solidcraft-kicad-{tag}-{expected[name]}"
+        if name.endswith(".zip"):
+            with zipfile.ZipFile(path) as archive:
+                info = json.loads(archive.read(f"{base}/BUILD-INFO.json"))
+        else:
+            with tarfile.open(path, "r:gz") as archive:
+                info = json.load(archive.extractfile(f"{base}/BUILD-INFO.json"))
+        if info != {"version": version(), "target": expected[name], "commit": commit}:
+            raise ValueError(f"archive provenance does not match release commit {commit}: {name}")
         checksums.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {name}\n")
     (OUTPUT / "SHA256SUMS").write_text("".join(checksums), encoding="utf-8")
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
@@ -150,16 +161,21 @@ def prepare(tag):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
+    commands.add_parser("version", help="print the package version for tagging")
     commands.add_parser("validate-tag").add_argument("tag")
     commands.add_parser("package").add_argument("target", choices=TARGETS)
-    commands.add_parser("prepare").add_argument("tag")
+    prepare_command = commands.add_parser("prepare")
+    prepare_command.add_argument("tag")
+    prepare_command.add_argument("--commit", required=True, help="commit validated by main CI")
     args = parser.parse_args()
-    if args.command == "validate-tag":
+    if args.command == "version":
+        print(version())
+    elif args.command == "validate-tag":
         validate_tag(args.tag)
     elif args.command == "package":
         package(args.target)
     else:
-        prepare(args.tag)
+        prepare(args.tag, args.commit)
 
 
 if __name__ == "__main__":

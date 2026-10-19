@@ -4,12 +4,6 @@ on:
   push:
     branches: [master]
   pull_request:
-  workflow_call:
-    inputs:
-      release:
-        description: Build and package release binaries after testing
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -37,9 +31,6 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: checks
-      - name: Validate release tag
-        if: inputs.release
-        run: python3 scripts/release.py validate-tag "$GITHUB_REF_NAME"
       - run: cargo fmt --check
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -79,7 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          lfs: ${{ inputs.release || false }}
+          lfs: ${{ github.event_name == 'push' }}
           persist-credentials: false
       - name: Install Rust
         run: |
@@ -107,13 +98,13 @@ jobs:
           python3 scripts/fetch_demo_models.py
           cargo test --locked --release --target "${{ matrix.target }}" --test demo -- --ignored
       - name: Build release binary
-        if: inputs.release
+        if: github.event_name == 'push'
         run: cargo build --locked --release --target "${{ matrix.target }}" --bin solidcraft-kicad --timings
       - name: Package and smoke-test binary
-        if: inputs.release
+        if: github.event_name == 'push'
         run: ${{ runner.os == 'Windows' && 'python' || 'python3' }} scripts/release.py package "${{ matrix.target }}"
       - name: Upload release archive
-        if: inputs.release
+        if: github.event_name == 'push'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: binaries-${{ matrix.target }}
@@ -121,6 +112,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+          overwrite: true
       - name: Upload build timings
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

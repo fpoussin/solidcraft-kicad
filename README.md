@@ -375,30 +375,38 @@ revisions, and tests check the documented versions and format against the engine
 
 Pull requests and pushes to `master` run the **CI** workflow: formatting, Clippy,
 maintenance-script tests, and release-mode tests on Linux x64, macOS arm64
-and Windows x64. These runs do not create release archives or publish releases.
+and Windows x64, plus real KiCad demo acceptance on Linux. Pushes to `master`
+also build, smoke-test and package the three native binaries. The archives are
+retained as workflow artifacts for 14 days. Pull requests only validate; CI
+never publishes a GitHub release.
 
-Version-tag pushes (`v*`) run the **Release** workflow. It reuses the same CI
-validation, then builds, smoke-tests and packages the three native binaries.
-Release archives are available as workflow artifacts before publication.
+Version-tag pushes (`v*`) run the **Release** workflow. It waits up to two hours
+for successful default-branch CI on the tag's exact commit, including queued
+builds and CI runs that have not appeared yet. It downloads that run's three
+archive artifacts and verifies their embedded version, platform and commit
+before publishing them. Tag workflows do not rebuild the binaries or repeat CI.
 
 To publish a release, update `Cargo.toml`, `Cargo.lock` and the corresponding
-section in [CHANGELOG.md](CHANGELOG.md), commit with a signature, and push the
-branch. After branch CI passes, create and push a signed `vVERSION` tag matching
-the package version. The release workflow validates it before publishing.
-For example:
+section in [CHANGELOG.md](CHANGELOG.md), then commit with a signature. Create a
+signed tag from the package version and push the commit and tag together:
 
 ```sh
-git tag -s v0.2.0 -m 'solidcraft-kicad v0.2.0'
-git push origin v0.2.0
+tag="v$(python3 scripts/release.py version)"
+git tag -s "$tag" -m "solidcraft-kicad $tag"
+git push --atomic origin master "$tag"
 ```
 
-The tag runs the complete CI workflow. Once every platform and check passes, CI
-packages the binaries with documentation, project and dependency license notices,
-the README image and build provenance, generates `SHA256SUMS`, and publishes all
-three archives together to
-GitHub Releases. Publishing uses the workflow's GitHub token; no personal token
-or local release builds are required. A failed draft upload can be retried; an
-already published release is never overwritten.
+Tagging a previously built commit also reuses its artifacts immediately. Failed
+or cancelled CI blocks publication. If artifacts are missing or expired, rerun
+the default-branch CI run for that commit, then rerun the release workflow.
+Release tags must match the package version and have a matching default-branch
+push build; artifacts from pull requests or different commits are never used.
+
+The archives include documentation, project and dependency license notices, the
+README image and build provenance. The release workflow generates `SHA256SUMS`
+and publishes all three archives together using its GitHub token; no personal
+token or local release builds are required. A failed draft upload can be retried;
+an already published release is never overwritten.
 
 ## Dependencies and license
 

@@ -79,7 +79,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn(f"{base}/THIRD-PARTY-LICENSES/example-1.0.0/LICENSE-MIT", names)
             self.assertIn(f"{base}/THIRD-PARTY-LICENSES/DEPENDENCIES.json", names)
             self.assertEqual(info, {"version": "0.1.0", "target": target, "commit": "a" * 40})
-        release.prepare("v0.1.0")
+        release.prepare("v0.1.0", "a" * 40)
         lines = (release.OUTPUT / "SHA256SUMS").read_text().splitlines()
         self.assertEqual(len(lines), 3)
         for line in lines:
@@ -88,7 +88,34 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual((release.OUTPUT / "notes.md").read_text(), "First release.\n")
         (release.OUTPUT / lines[0].split("  ")[1]).unlink()
         with self.assertRaises(ValueError):
-            release.prepare("v0.1.0")
+            release.prepare("v0.1.0", "a" * 40)
+
+    def test_archives_from_a_different_commit_cannot_be_published(self):
+        for target in release.TARGETS:
+            self.package(target)
+        with self.assertRaisesRegex(ValueError, "provenance does not match"):
+            release.prepare("v0.1.0", "b" * 40)
+        self.assertFalse((release.OUTPUT / "SHA256SUMS").exists())
+
+    def test_every_platform_provenance_is_verified(self):
+        for target in release.TARGETS:
+            for field, wrong in (("commit", "b" * 40), ("target", "another-target"), ("version", "0.2.0")):
+                with self.subTest(target=target, field=field):
+                    for platform in release.TARGETS:
+                        self.package(platform)
+                    base = f"solidcraft-kicad-v0.1.0-{target}"
+                    info = {"version": "0.1.0", "target": target, "commit": "a" * 40, field: wrong}
+                    data = json.dumps(info).encode()
+                    if target.endswith("windows-msvc"):
+                        with zipfile.ZipFile(release.OUTPUT / f"{base}.zip", "w") as archive:
+                            archive.writestr(f"{base}/BUILD-INFO.json", data)
+                    else:
+                        with tarfile.open(release.OUTPUT / f"{base}.tar.gz", "w:gz") as archive:
+                            member = tarfile.TarInfo(f"{base}/BUILD-INFO.json")
+                            member.size = len(data)
+                            archive.addfile(member, io.BytesIO(data))
+                    with self.assertRaisesRegex(ValueError, "provenance does not match"):
+                        release.prepare("v0.1.0", "a" * 40)
 
     def test_tag_must_match_package_version(self):
         release.validate_tag("v0.1.0")
