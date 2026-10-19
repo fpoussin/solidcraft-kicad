@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Bundle the MIT-licensed pico-ice Rev3 demo PCB with verified provenance,
+  a pinned model downloader, and real KiCad conversion/reopening tests in Linux CI.
 - Upgrade the embedded SolidCraft engine, control client and matching kernel
   patches to the `v0.16.2` Git tag. Generated assemblies use file format 27 and
   require SolidCraft 0.16.0 or newer for opening and live insertion.

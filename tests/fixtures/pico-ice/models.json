@@ -1,0 +1,179 @@
+{
+  "files": [
+    {
+      "path": "Capacitor_SMD.3dshapes/C_0402_1005Metric.step",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Capacitor_SMD.3dshapes/C_0402_1005Metric.step",
+      "sha256": "03e44c4b2b727b8d4b6b1fd598cbd12dd5e614f1dfeefa96a92a07e3a3b312a2",
+      "bytes": 43502
+    },
+    {
+      "path": "Capacitor_SMD.3dshapes/C_0402_1005Metric.wrl",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Capacitor_SMD.3dshapes/C_0402_1005Metric.wrl",
+      "sha256": "edd1de5a07b3b6d903024aab93512280b5ae5ecc564adc079876b8d80168afc0",
+      "bytes": 18013
+    },
+    {
+      "path": "Connector_PinHeader_2.54mm.3dshapes/PinHeader_2x20_P2.54mm_Vertical.step",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Connector_PinHeader_2.54mm.3dshapes/PinHeader_2x20_P2.54mm_Vertical.step",
+      "sha256": "3e3ee5e050716acbc8e6e4fc2778dce66ea1c9b17bdf6583ec399dabef67e264",
+      "bytes": 1251227
+    },
+    {
+      "path": "Connector_PinHeader_2.54mm.3dshapes/PinHeader_2x20_P2.54mm_Vertical.wrl",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Connector_PinHeader_2.54mm.3dshapes/PinHeader_2x20_P2.54mm_Vertical.wrl",
+      "sha256": "b9a64a28161a6b05b5a54bb6860e0d818f83096c3867a428a8a9164ba876bd7a",
+      "bytes": 225891
+    },
+    {
+      "path": "Crystal.3dshapes/Crystal_SMD_2520-4Pin_2.5x2.0mm.step",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/d5db5cea003fe2b4b1c9b145f5fcbd5fdb48f8ca/Crystal.3dshapes/Crystal_SMD_2520-4Pin_2.5x2.0mm.step",
+      "sha256": "cd0c53e8a35a3cb36fc18e5248a2acf382b94b62d156b7bb9cc398eef3e21c4a",
+      "bytes": 305966
+    },
+    {
+      "path": "Crystal.3dshapes/Crystal_SMD_2520-4Pin_2.5x2.0mm.wrl",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/d5db5cea003fe2b4b1c9b145f5fcbd5fdb48f8ca/Crystal.3dshapes/Crystal_SMD_2520-4Pin_2.5x2.0mm.wrl",
+      "sha256": "6d1d0e39c0b11920d08891d4d4850dc19729e5d01c73c833b92d153be3298d75",
+      "bytes": 46539
+    },
+    {
+      "path": "Diode_SMD.3dshapes/D_SOD-323.step",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Diode_SMD.3dshapes/D_SOD-323.step",
+      "sha256": "6c72b6baeee0baa9075c149ba2e76f711328315273e81580dbd57fb36a86c1e3",
+      "bytes": 105189
+    },
+    {
+      "path": "Diode_SMD.3dshapes/D_SOD-323.wrl",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Diode_SMD.3dshapes/D_SOD-323.wrl",
+      "sha256": "7a94b3fda3dbdbdf8a0b7c7f4fad358f1bdca6e9f3e1fe0e9496cbbfe82da456",
+      "bytes": 29338
+    },
+    {
+      "path": "Diode_SMD.3dshapes/D_SOD-523.step",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Diode_SMD.3dshapes/D_SOD-523.step",
+      "sha256": "b525222377930c32abea58606bffba3aaf171cc66ac292b82d28a82d646d995d",
+      "bytes": 43207
+    },
+    {
+      "path": "Diode_SMD.3dshapes/D_SOD-523.wrl",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Diode_SMD.3dshapes/D_SOD-523.wrl",
+      "sha256": "f1d146a2addd2e9623725330ad797bd556f8fc57c957f9f819e3186231ba1f77",
+      "bytes": 9145
+    },
+    {
+      "path": "LED_SMD.3dshapes/LED_0603_1608Metric.step",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/LED_SMD.3dshapes/LED_0603_1608Metric.step",
+      "sha256": "98343205ec260ec165026ba2d44329a23096779ac36c553ea84aa7b370242e6d",
+      "bytes": 77068
+    },
+    {
+      "path": "LED_SMD.3dshapes/LED_0603_1608Metric.wrl",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/LED_SMD.3dshapes/LED_0603_1608Metric.wrl",
+      "sha256": "2ae6364ec5c5c4c39cb54e3edac681674f0bf0ce1d6c8b0b7e659ae0066c1ee8",
+      "bytes": 21674
+    },
+    {
+      "path": "LICENSE.md",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/LICENSE.md",
+      "sha256": "45d2bce75e5a4208f5afb01b8fb2c406e700371c4fe2b5f5cd5c443d46db4d8f",
+      "bytes": 2101
+    },
+    {
+      "path": "Package_DFN_QFN.3dshapes/OnSemi_XDFN4-1EP_1.0x1.0mm_EP0.52x0.52mm.step",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/d5db5cea003fe2b4b1c9b145f5fcbd5fdb48f8ca/Package_DFN_QFN.3dshapes/OnSemi_XDFN4-1EP_1.0x1.0mm_EP0.52x0.52mm.step",
+      "sha256": "1fcbe51eaca76e761de8aac3070a55467f3017cf1867ff062861bcfffd48546a",
+      "bytes": 147078
+    },
+    {
+      "path": "Package_DFN_QFN.3dshapes/OnSemi_XDFN4-1EP_1.0x1.0mm_EP0.52x0.52mm.wrl",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/d5db5cea003fe2b4b1c9b145f5fcbd5fdb48f8ca/Package_DFN_QFN.3dshapes/OnSemi_XDFN4-1EP_1.0x1.0mm_EP0.52x0.52mm.wrl",
+      "sha256": "29e8c2b92aad9c1e70a0d02b674ed33862082f175052d60a80577e85807ec71d",
+      "bytes": 27803
+    },
+    {
+      "path": "Package_DFN_QFN.3dshapes/QFN-48-1EP_7x7mm_P0.5mm_EP5.6x5.6mm.step",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Package_DFN_QFN.3dshapes/QFN-48-1EP_7x7mm_P0.5mm_EP5.6x5.6mm.step",
+      "sha256": "ba30b82fac313a906167a8e5739f396cae47472c2ef885c0975be7ea93235b26",
+      "bytes": 528922
+    },
+    {
+      "path": "Package_DFN_QFN.3dshapes/QFN-48-1EP_7x7mm_P0.5mm_EP5.6x5.6mm.wrl",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Package_DFN_QFN.3dshapes/QFN-48-1EP_7x7mm_P0.5mm_EP5.6x5.6mm.wrl",
+      "sha256": "53baf388d3a782bfab3650abf6baf0934f4e8695b82aa0558c85f124e94da77e",
+      "bytes": 97294
+    },
+    {
+      "path": "Package_DFN_QFN.3dshapes/QFN-56-1EP_7x7mm_P0.4mm_EP5.6x5.6mm.step",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Package_DFN_QFN.3dshapes/QFN-56-1EP_7x7mm_P0.4mm_EP5.6x5.6mm.step",
+      "sha256": "a7e1b68d7c240016a0c468e633f7967f445758a90dea110c3eff24882158aaa8",
+      "bytes": 623064
+    },
+    {
+      "path": "Package_DFN_QFN.3dshapes/QFN-56-1EP_7x7mm_P0.4mm_EP5.6x5.6mm.wrl",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Package_DFN_QFN.3dshapes/QFN-56-1EP_7x7mm_P0.4mm_EP5.6x5.6mm.wrl",
+      "sha256": "7b8fe922c9b3d6776999bd2c8afd259ab35c65c3c79ce1a3bd36ab81069eb159",
+      "bytes": 186541
+    },
+    {
+      "path": "Package_SO.3dshapes/SOIC-8_3.9x4.9mm_P1.27mm.step",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Package_SO.3dshapes/SOIC-8_3.9x4.9mm_P1.27mm.step",
+      "sha256": "d9b46f6dd6cf8c5e2028838eed38e2a6a7f26235856078511e5a71a594ca809e",
+      "bytes": 253807
+    },
+    {
+      "path": "Package_SO.3dshapes/SOIC-8_3.9x4.9mm_P1.27mm.wrl",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Package_SO.3dshapes/SOIC-8_3.9x4.9mm_P1.27mm.wrl",
+      "sha256": "2b84645ac35f878381da69ebf467feab9e5f054922c809c1b28a1586dd4e462d",
+      "bytes": 77404
+    },
+    {
+      "path": "Package_TO_SOT_SMD.3dshapes/SOT-23.step",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Package_TO_SOT_SMD.3dshapes/SOT-23.step",
+      "sha256": "9fe9af3cc6cf3d3bc3bd3da71731af2037c67f690245102a20e1e39a33e9ade4",
+      "bytes": 119867
+    },
+    {
+      "path": "Package_TO_SOT_SMD.3dshapes/SOT-23.wrl",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Package_TO_SOT_SMD.3dshapes/SOT-23.wrl",
+      "sha256": "4a113d4d6a5f3b22024559dc16d03361e7d8154db3dc74fcd7d6736091a0bda7",
+      "bytes": 34049
+    },
+    {
+      "path": "Resistor_SMD.3dshapes/R_0402_1005Metric.step",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Resistor_SMD.3dshapes/R_0402_1005Metric.step",
+      "sha256": "91507e5af4251cb4ef38e04889c9b98da29904432bd83786bba13ae9b605eacb",
+      "bytes": 40756
+    },
+    {
+      "path": "Resistor_SMD.3dshapes/R_0402_1005Metric.wrl",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Resistor_SMD.3dshapes/R_0402_1005Metric.wrl",
+      "sha256": "ce89655575a3858f28f001c08aed3f4e4a4b85833d9d3366e0902e44e8d0ebd8",
+      "bytes": 14831
+    },
+    {
+      "path": "Resistor_SMD.3dshapes/R_0603_1608Metric.step",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Resistor_SMD.3dshapes/R_0603_1608Metric.step",
+      "sha256": "1875571c326d0d9e96f36b4efeb8094068ef7619f0a449c781caf0b49c2e5861",
+      "bytes": 40618
+    },
+    {
+      "path": "Resistor_SMD.3dshapes/R_0603_1608Metric.wrl",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Resistor_SMD.3dshapes/R_0603_1608Metric.wrl",
+      "sha256": "eadfec9e71c67b1dd3910c72b45d811a06f0ab5397d0609354b10e9a3a4c1fdd",
+      "bytes": 14831
+    },
+    {
+      "path": "Resistor_SMD.3dshapes/R_Array_Concave_4x0402.step",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Resistor_SMD.3dshapes/R_Array_Concave_4x0402.step",
+      "sha256": "5c0d91d43db0e2b9f624daee9eaa3b60b279cb5631b6a8cc480baed0b019349e",
+      "bytes": 297360
+    },
+    {
+      "path": "Resistor_SMD.3dshapes/R_Array_Concave_4x0402.wrl",
+      "url": "https://gitlab.com/kicad/libraries/kicad-packages3D/-/raw/1080b6e565e56bae9be46db2278a1542092d7a2d/Resistor_SMD.3dshapes/R_Array_Concave_4x0402.wrl",
+      "sha256": "f08db6c9883717e51d2302cea0e279d03848e09dee967e64f980c2cb8444d40b",
+      "bytes": 92157
+    }
+  ],
+  "license": "CC-BY-SA-4.0 WITH KiCad libraries exception; see downloaded LICENSE.md and model headers"
+}

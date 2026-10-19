@@ -3,6 +3,13 @@
 solidcraft-kicad is independently implemented. KiCad StepUp was examined to
 understand the user workflow; none of its code or assets are included.
 
+The bundled [pico-ice Rev3 test PCB](tests/fixtures/pico-ice/README.md) is by
+tinyVision.ai and is distributed under its original
+[MIT license](tests/fixtures/pico-ice/LICENSE). Its provenance and checksums are
+recorded alongside the unmodified board. Optional downloaded KiCad 3D models
+retain their separate licenses and original notices in the ignored test cache;
+they are not part of the vendored fixture or release archives.
+
 The following dependencies provide the implementation's main capabilities:
 
 | Dependency | Role | Upstream |

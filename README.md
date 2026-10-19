@@ -292,9 +292,22 @@ surface finishes, metallic appearances, vertex sharing, persistence, individual
 visibility and movement, collisions in names, rollback, destination changes,
 missing-model policy and lost replies. The substrate is also checked for display
 edges visible in the shaded-with-edges style after saving and reopening.
-Board-specific acceptance tests are ignored by default because their source
-boards and model libraries are not bundled. See [tests/assembly.rs](tests/assembly.rs)
-for their required environment variables and expected geometry.
+The bundled [MIT-licensed pico-ice demo](tests/fixtures/pico-ice/README.md) is a
+routed four-layer board with 101 footprints. Its metadata and original-file
+checksums are tested without KiCad. To run real conversion and saved-file
+reopening checks, install KiCad 10, then run:
+
+```sh
+python3 scripts/fetch_demo_models.py
+cargo test --locked --release --test demo -- --include-ignored
+```
+
+The script fetches only checksum-pinned model dependencies (about 4.8 MB) into
+ignored `artifacts/`; those external KiCad models retain their own licenses.
+The fixture documents its expected missing models. Linux CI runs this acceptance
+test. Additional tests in [tests/assembly.rs](tests/assembly.rs) use external
+boards and remain ignored by default; see their environment variables and
+expected geometry.
 To exercise the actual desktop control channel on Linux, use a separate app
 under Xvfb (requires `xvfb-run`):
 

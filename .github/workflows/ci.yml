@@ -95,6 +95,17 @@ jobs:
         # Share optimized dependencies with the shipped binary instead of also
         # compiling the entire CAD engine in the debug profile.
         run: cargo test --locked --release --target "${{ matrix.target }}" --timings
+      - name: Install KiCad for demo acceptance
+        if: runner.os == 'Linux'
+        run: |
+          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends kicad
+      - name: Test bundled demo with real KiCad exports
+        if: runner.os == 'Linux'
+        run: |
+          python3 scripts/fetch_demo_models.py
+          cargo test --locked --release --target "${{ matrix.target }}" --test demo -- --ignored
       - name: Build release binary
         if: inputs.release
         run: cargo build --locked --release --target "${{ matrix.target }}" --bin solidcraft-kicad --timings

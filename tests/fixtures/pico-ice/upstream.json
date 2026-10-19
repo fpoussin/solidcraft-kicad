@@ -1,0 +1,19 @@
+{
+  "repository": "https://github.com/tinyvision-ai-inc/pico-ice",
+  "revision": "00e13360969d01fbb9663e4ea17f723c1a8e8400",
+  "license": "MIT",
+  "files": {
+    "pico-ice.kicad_pcb": {
+      "upstream_path": "Board/Rev3/pico-ice.kicad_pcb",
+      "sha256": "71471afa7c6aea83338bfd1e36d463f3a8efba5c6cce07795d70bea1a53675b8"
+    },
+    "pico-ice.kicad_pro": {
+      "upstream_path": "Board/Rev3/pico-ice.kicad_pro",
+      "sha256": "81c42e8aa62c3293eaa01c4ec3ba159b1d25187d2fff7c8affd768d9109e8370"
+    },
+    "LICENSE": {
+      "upstream_path": "LICENSE",
+      "sha256": "b35b7ae2f5f663e4fd3f5503114cf905cebdfd0be76c05112f50c724623a0c05"
+    }
+  }
+}

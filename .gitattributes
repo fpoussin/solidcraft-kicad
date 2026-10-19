@@ -3,3 +3,8 @@
 *.jpeg filter=lfs diff=lfs merge=lfs -text
 *.webp filter=lfs diff=lfs merge=lfs -text
 *.gif filter=lfs diff=lfs merge=lfs -text
+
+# Preserve checksum-verified upstream fixture bytes on Windows too.
+/tests/fixtures/pico-ice/pico-ice.kicad_pcb -text
+/tests/fixtures/pico-ice/pico-ice.kicad_pro -text
+/tests/fixtures/pico-ice/LICENSE -text
