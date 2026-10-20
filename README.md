@@ -67,10 +67,14 @@ solidcraft-kicad build path/to/board.kicad_pcb --force
 ```
 
 The existing file is replaced atomically after a successful conversion.
+Builds use lossless compact compression by default. `--compression fast` stores
+geometry uncompressed for faster writing. Both modes produce self-contained native
+files readable by the same SolidCraft versions, with identical geometry and appearance.
 Successful builds and insertions show a progress bar only when stderr is an
 interactive terminal. Builds report each enabled copper, silkscreen and soldermask
 side, pads/plating, the substrate and component models as their exports finish.
-The step count adjusts to omitted layers; exports remain concurrent.
+The progress bar also reports preparation, compression and writing. The step count
+adjusts to omitted layers and compression mode; exports remain concurrent.
 Redirected output stays quiet; warnings and errors go to
 stderr. Add `--json` to print a report to stdout with source hash, exported
 references, prefix overrides and omissions:
@@ -135,7 +139,7 @@ copper plots when copper is enabled.
 The board layers and component models are exported concurrently as binary glTF
 (GLB), alongside copper SVG plots and a small STEP export of the substrate.
 Faces sharing a material
-are batched, and exact duplicate board vertices are stored once. The writer
+are batched, and exact duplicate vertices within each mesh are stored once. The writer
 preserves placements, converts metres/Y-up to KiCad's
 millimetres/Z-up, and groups model meshes under their footprint references.
 Identical geometry with matching colour and material response is stored once,
@@ -337,14 +341,18 @@ python3 scripts/validate-desktop.py --app /path/to/SolidCraft.AppImage \
 ```
 
 A development benchmark with 323 placed parts and all default board details,
-including outer copper, converted in **7.54 s**. SolidCraft 0.16.2 opened the
-result in **1.74 s**, with its first render ready in **2.52 s** in the isolated
-desktop. The placed parts,
-including the board, share 42 geometry definitions. All board layers together
-use nine mesh bodies alongside the CAD substrate; the native file occupies
-**27.6 MB**. One unavailable
-model was reported as an omission. These are measured wall times on the
-development machine, excluding application startup.
+including outer copper, converted in **7.39 s** with default compact compression.
+SolidCraft 0.16.2 opened the result in **1.72 s**, with its first render ready in
+**2.51 s** in the isolated desktop. The placed parts, including the board, share
+42 geometry definitions. All board layers together use nine mesh bodies alongside
+the CAD substrate; the native file occupies
+**7.13 MB**, down from **27.59 MB** before compression and component vertex
+deduplication (a **74% reduction**). With `--compression fast`, the same board
+occupies **26.17 MB**. A smaller board went from **467 KB** to **122 KB** with
+compact compression and converted in **0.69 s**. Both compression modes retain
+the same triangle coordinates, winding, appearances and component placements.
+One unavailable model was reported as an omission. These are measured wall times
+on the development machine, excluding application startup.
 
 No KiCad source files are rewritten. KiCad itself can create local `.kicad_prl`
 preferences when loading a project that has none.

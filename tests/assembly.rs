@@ -268,6 +268,72 @@ fn identical_models_share_geometry_but_keep_independent_placements() -> Result<(
 
 #[test]
 #[cfg(unix)]
+fn both_build_paths_preserve_native_documents_and_report_compression()
+-> std::result::Result<(), Box<dyn std::error::Error>> {
+    use std::{cell::RefCell, fs::File};
+
+    let (dir, legacy) = fixture(false)?;
+    let settings = Settings::default();
+    let program = dir.path().join("fake-kicad");
+    let prepared = Exporter {
+        program: &program,
+        timeout: Duration::from_secs(5),
+        settings: &settings,
+    }
+    .stage_build(inventory::read(&dir.path().join("board.txt"))?, false)?;
+    for (path, stage) in [("legacy", &legacy), ("prepared", &prepared)] {
+        let mut documents = Vec::new();
+        for compression in [cad::Compression::Compact, cad::Compression::Fast] {
+            let output = dir
+                .path()
+                .join(format!("{path}-{compression:?}"))
+                .join("board.solidcraft");
+            let stages = RefCell::new(Vec::new());
+            cad::build_with_progress(stage, &output, false, false, compression, &|label| {
+                assert!(!output.exists(), "published before all stages completed");
+                stages.borrow_mut().push(label);
+            })?;
+            let expected = if compression == cad::Compression::Compact {
+                vec!["Compressing SolidCraft file", "Writing SolidCraft file"]
+            } else {
+                vec!["Writing SolidCraft file"]
+            };
+            assert_eq!(stages.into_inner(), expected);
+            documents.push(solidcraft_engine::io::read_design(&std::fs::read(
+                &output,
+            )?)?);
+            let mut backend = Headless::default();
+            cad::execute(&mut backend, "doc.open", json!({"path": output}))?;
+            assert_eq!(cad::validate(&mut backend)?["body_count"], 3);
+            let mut archive = zip::ZipArchive::new(File::open(&output)?)?;
+            for index in 0..archive.len() {
+                let entry = archive.by_index(index)?;
+                if entry.name()?.starts_with("blobs/") {
+                    assert_eq!(
+                        entry.compression(),
+                        if compression == cad::Compression::Compact {
+                            zip::CompressionMethod::Deflated
+                        } else {
+                            zip::CompressionMethod::Stored
+                        }
+                    );
+                }
+            }
+            let old = std::fs::read(&output)?;
+            assert!(
+                cad::build_with_compression(stage, &output, false, false, compression).is_err()
+            );
+            assert_eq!(std::fs::read(&output)?, old);
+            cad::build_with_compression(stage, &output, false, true, compression)?;
+            assert_eq!(std::fs::read(&output)?, old);
+        }
+        assert_eq!(documents[0], documents[1]);
+    }
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
 fn board_layers_retain_both_side_colors_finish_and_batched_geometry() -> Result<()> {
     let (dir, _stage) = fixture(false)?;
     let (mut board, mut bin) = mesh_fixture(false, false);

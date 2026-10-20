@@ -53,6 +53,9 @@ enum Action {
         /// Overwrite an existing output file without prompting.
         #[arg(short, long)]
         force: bool,
+        /// Native geometry storage: compact compresses losslessly; fast skips compression.
+        #[arg(long, value_enum, default_value = "compact")]
+        compression: cad::Compression,
         #[command(flatten)]
         layers: LayerOptions,
     },
@@ -113,11 +116,12 @@ fn run(cli: Cli) -> Result<Value> {
     let command = cli
         .command
         .ok_or_else(|| Error::message("choose build or insert, or use --check-update"))?;
-    let (input, output, port, force, layers) = match command {
+    let (input, output, port, force, layers, compression) = match command {
         Action::Build {
             input,
             output,
             force,
+            compression,
             layers,
         } => {
             let output = match output {
@@ -141,9 +145,17 @@ fn run(cli: Cli) -> Result<Value> {
                     pads: !layers.no_pads,
                     copper: !layers.no_copper,
                 },
+                compression,
             )
         }
-        Action::Insert { input, port } => (input, None, Some(port), false, BoardLayers::default()),
+        Action::Insert { input, port } => (
+            input,
+            None,
+            Some(port),
+            false,
+            BoardLayers::default(),
+            cad::Compression::Fast,
+        ),
     };
     let mut overwrite = false;
     if let Some(output) = &output {
@@ -157,7 +169,7 @@ fn run(cli: Cli) -> Result<Value> {
         overwrite = confirm_overwrite(output, force)?;
     }
     let progress = Progress::with_total(if output.is_some() {
-        layers.progress_steps()
+        layers.progress_steps() + 1 + usize::from(compression == cad::Compression::Compact)
     } else {
         3
     });
@@ -200,8 +212,10 @@ fn run(cli: Cli) -> Result<Value> {
         stage
     };
     let result = if let Some(output) = output {
-        progress.label("Writing SolidCraft file");
-        cad::build_with_options(&stage, &output, measure, overwrite)?
+        progress.label("Preparing SolidCraft file");
+        cad::build_with_progress(&stage, &output, measure, overwrite, compression, &|label| {
+            progress.advance(label)
+        })?
     } else {
         progress.label("Inserting components");
         let b = remote
@@ -297,6 +311,52 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compression_defaults_to_compact_and_only_applies_to_builds() -> Result<()> {
+        for (arguments, expected) in [
+            (
+                vec!["solidcraft-kicad", "build", "board.kicad_pcb"],
+                cad::Compression::Compact,
+            ),
+            (
+                vec![
+                    "solidcraft-kicad",
+                    "build",
+                    "board.kicad_pcb",
+                    "--compression",
+                    "fast",
+                ],
+                cad::Compression::Fast,
+            ),
+        ] {
+            let cli = Cli::try_parse_from(arguments).map_err(|e| Error::message(e.to_string()))?;
+            assert!(
+                matches!(cli.command, Some(Action::Build { compression, .. }) if compression == expected)
+            );
+        }
+        assert!(
+            Cli::try_parse_from([
+                "solidcraft-kicad",
+                "insert",
+                "board.kicad_pcb",
+                "--compression",
+                "compact"
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "solidcraft-kicad",
+                "build",
+                "board.kicad_pcb",
+                "--compression",
+                "zstd"
+            ])
+            .is_err()
+        );
+        Ok(())
+    }
 
     #[test]
     fn forced_update_check_needs_no_board_or_subcommand() -> Result<()> {

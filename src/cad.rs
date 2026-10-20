@@ -5,9 +5,12 @@ use serde_json::{Value, json};
 use solidcraft_mcp::{Backend, Headless};
 
 use crate::{
+    container,
     error::{Error, Result},
     staging::Staged,
 };
+
+pub use crate::container::Compression;
 
 pub const METADATA_KEY: &str = "org.solidcraft-kicad.imports";
 pub const SOLIDCRAFT_VERSION: &str = env!("SOLIDCRAFT_ENGINE_VERSION");
@@ -174,6 +177,29 @@ pub fn build_with_options(
     measure: bool,
     overwrite: bool,
 ) -> Result<Value> {
+    build_with_compression(stage, output, measure, overwrite, Compression::default())
+}
+
+pub fn build_with_compression(
+    stage: &Staged,
+    output: &Path,
+    measure: bool,
+    overwrite: bool,
+    compression: Compression,
+) -> Result<Value> {
+    build_with_progress(stage, output, measure, overwrite, compression, &|_| {})
+}
+
+/// Reports the next stage after serialization and, when enabled, compression finish.
+/// The caller advances once more after this function returns to account for writing.
+pub fn build_with_progress(
+    stage: &Staged,
+    output: &Path,
+    measure: bool,
+    overwrite: bool,
+    compression: Compression,
+    next_stage: &dyn Fn(&'static str),
+) -> Result<Value> {
     if !overwrite && output.exists() {
         return Err(Error::message(format!(
             "output already exists: {}",
@@ -209,6 +235,7 @@ pub fn build_with_options(
         };
         let bytes = solidcraft_engine::io::write_design_container(&doc)
             .map_err(|e| Error::message(e.to_string()))?;
+        let bytes = compress(bytes, compression, next_stage)?;
         let parent = output
             .parent()
             .ok_or_else(|| Error::message("output has no parent folder"))?;
@@ -256,12 +283,29 @@ pub fn build_with_options(
         "file.save_as",
         json!({"path": native, "format": "container"}),
     )?;
+    let bytes = compress(std::fs::read(&native)?, compression, next_stage)?;
+    std::fs::write(&native, bytes)?;
     if overwrite {
         std::fs::rename(&native, output)?;
     } else {
         std::fs::hard_link(&native, output)?;
     }
     Ok(json!({"component_name": name, "output": output, "measurement": measure}))
+}
+
+fn compress(
+    bytes: Vec<u8>,
+    compression: Compression,
+    next_stage: &dyn Fn(&'static str),
+) -> Result<Vec<u8>> {
+    let bytes = if compression == Compression::Compact {
+        next_stage("Compressing SolidCraft file");
+        container::compact(&bytes)?
+    } else {
+        bytes
+    };
+    next_stage("Writing SolidCraft file");
+    Ok(bytes)
 }
 
 #[derive(Debug, PartialEq)]

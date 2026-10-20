@@ -1756,6 +1756,7 @@ dependencies = [
  "ureq",
  "usvg",
  "wait-timeout",
+ "zip 9.0.5",
 ]
 
 [[package]]

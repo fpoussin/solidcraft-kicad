@@ -198,6 +198,10 @@ pub(crate) fn prepare_with_copper(
                     "KiCad board export has no substrate material",
                 ));
             }
+        } else {
+            for item in &mut meshes {
+                compact_vertices(&mut item.mesh)?;
+            }
         }
         let name = unique_name(reference, &mut names);
         let placement = mat_mul(&TO_Z_UP, &mat_mul(&model.origin, &TO_Y_UP));
@@ -369,7 +373,7 @@ fn compact_vertices(mesh: &mut MeshData) -> Result<()> {
     for point in mesh.positions.as_chunks::<3>().0 {
         let key = point.map(|v| if v == 0.0 { 0 } else { v.to_bits() });
         let next = u32::try_from(positions.len() / 3)
-            .map_err(|_| Error::message("board mesh has too many vertices"))?;
+            .map_err(|_| Error::message("mesh has too many vertices"))?;
         let index = *indices.entry(key).or_insert_with(|| {
             positions.extend_from_slice(point);
             next
@@ -379,7 +383,7 @@ fn compact_vertices(mesh: &mut MeshData) -> Result<()> {
     for index in &mut mesh.triangles {
         *index = *remap
             .get(*index as usize)
-            .ok_or_else(|| Error::message("invalid board mesh index"))?;
+            .ok_or_else(|| Error::message("invalid mesh index"))?;
     }
     mesh.positions = positions;
     Ok(())
@@ -559,6 +563,94 @@ impl Walker<'_> {
             self.visit(Some(place.slot), &placed, label, origin, stack)?;
             stack.pop();
         }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn vertex_compaction_preserves_triangles_nearby_points_and_display_normals() -> Result<()> {
+        fn expanded(mesh: &MeshData) -> Vec<[f64; 3]> {
+            mesh.triangles
+                .iter()
+                .map(|&i| {
+                    let offset = i as usize * 3;
+                    [
+                        mesh.positions[offset],
+                        mesh.positions[offset + 1],
+                        mesh.positions[offset + 2],
+                    ]
+                })
+                .collect()
+        }
+        let mut mesh = MeshData {
+            name: "component".into(),
+            positions: vec![
+                0.,
+                0.,
+                0.,
+                1.,
+                0.,
+                0.,
+                0.,
+                1.,
+                0.,
+                0.,
+                0.,
+                0.,
+                0.,
+                1.,
+                0.,
+                0.,
+                0.,
+                1.,
+                1.0000000000000002,
+                0.,
+                0.,
+            ],
+            triangles: vec![0, 1, 2, 3, 4, 5, 0, 6, 2],
+            color: Some([0.2, 0.4, 0.6]),
+        };
+        let before = expanded(&mesh);
+        let display = solidcraft_engine::kernel::mesh_body(
+            &mesh
+                .positions
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .map(|p| Vec3::new(p[0], p[1], p[2]))
+                .collect::<Vec<_>>(),
+            mesh.triangles.as_chunks::<3>().0,
+        )
+        .map_err(|e| Error::message(e.to_string()))?;
+        compact_vertices(&mut mesh)?;
+        assert_eq!(mesh.positions.len(), 15);
+        assert_eq!(expanded(&mesh), before);
+        let after = solidcraft_engine::kernel::mesh_body(
+            &mesh
+                .positions
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .map(|p| Vec3::new(p[0], p[1], p[2]))
+                .collect::<Vec<_>>(),
+            mesh.triangles.as_chunks::<3>().0,
+        )
+        .map_err(|e| Error::message(e.to_string()))?;
+        assert_eq!(
+            display
+                .tessellate(0.1)
+                .map_err(|e| Error::message(e.to_string()))?
+                .normals,
+            after
+                .tessellate(0.1)
+                .map_err(|e| Error::message(e.to_string()))?
+                .normals
+        );
+        assert_eq!(mesh.color, Some([0.2, 0.4, 0.6]));
         Ok(())
     }
 }

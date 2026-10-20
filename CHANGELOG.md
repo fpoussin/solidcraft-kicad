@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Compress native mesh and STEP payloads losslessly with Deflate level six by
+  default; `build --compression fast` retains uncompressed geometry storage.
+  Both modes remain compatible with SolidCraft 0.16.0 and newer.
+- Remove exact duplicate component vertices while preserving triangle geometry,
+  materials and independent placements. Report compression in terminal progress.
+
 ## 0.3.0
 
 - Package release archives in main-branch CI. Tag releases wait for successful
