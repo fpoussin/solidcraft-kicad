@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.1
+
 - Compress native mesh and STEP payloads losslessly with Deflate level six by
   default; `build --compression fast` retains uncompressed geometry storage.
   Both modes remain compatible with SolidCraft 0.16.0 and newer.
