@@ -5,6 +5,7 @@
 ## 0.4.0
 
 - Upgrade SolidCraft crates and kernel patches to `v0.18.3` (native format 29; desktop 0.18.3 or newer).
+- Preserve uncompressed geometry in `--compression fast` across both SolidCraft save paths.
 
 ## 0.3.1
 

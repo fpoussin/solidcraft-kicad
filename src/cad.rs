@@ -190,7 +190,7 @@ pub fn build_with_compression(
     build_with_progress(stage, output, measure, overwrite, compression, &|_| {})
 }
 
-/// Reports the next stage after serialization and, when enabled, compression finish.
+/// Reports the geometry-storage stage after serialization and then the final write stage.
 /// The caller advances once more after this function returns to account for writing.
 pub fn build_with_progress(
     stage: &Staged,
@@ -233,9 +233,12 @@ pub fn build_with_progress(
         } else {
             Value::Null
         };
-        let bytes = solidcraft_engine::io::write_design_container(&doc)
-            .map_err(|e| Error::message(e.to_string()))?;
-        let bytes = compress(bytes, compression, next_stage)?;
+        let bytes = solidcraft_engine::io::write_design_container_with_compression(
+            &doc,
+            solidcraft_engine::io::DesignCompression::Fast,
+        )
+        .map_err(|e| Error::message(e.to_string()))?;
+        let bytes = repack(bytes, compression, next_stage)?;
         let parent = output
             .parent()
             .ok_or_else(|| Error::message("output has no parent folder"))?;
@@ -281,9 +284,9 @@ pub fn build_with_progress(
     execute(
         &mut b,
         "file.save_as",
-        json!({"path": native, "format": "container"}),
+        json!({"path": native, "format": "container", "compression": "fast"}),
     )?;
-    let bytes = compress(std::fs::read(&native)?, compression, next_stage)?;
+    let bytes = repack(std::fs::read(&native)?, compression, next_stage)?;
     std::fs::write(&native, bytes)?;
     if overwrite {
         std::fs::rename(&native, output)?;
@@ -293,17 +296,16 @@ pub fn build_with_progress(
     Ok(json!({"component_name": name, "output": output, "measurement": measure}))
 }
 
-fn compress(
+fn repack(
     bytes: Vec<u8>,
     compression: Compression,
     next_stage: &dyn Fn(&'static str),
 ) -> Result<Vec<u8>> {
-    let bytes = if compression == Compression::Compact {
-        next_stage("Compressing SolidCraft file");
-        container::compact(&bytes)?
-    } else {
-        bytes
+    match compression {
+        Compression::Compact => next_stage("Compressing SolidCraft geometry"),
+        Compression::Fast => next_stage("Storing SolidCraft geometry"),
     };
+    let bytes = container::repack(&bytes, compression)?;
     next_stage("Writing SolidCraft file");
     Ok(bytes)
 }

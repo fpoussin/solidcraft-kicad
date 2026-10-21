@@ -73,8 +73,8 @@ files readable by the same SolidCraft versions, with identical geometry and appe
 Successful builds and insertions show a progress bar only when stderr is an
 interactive terminal. Builds report each enabled copper, silkscreen and soldermask
 side, pads/plating, the substrate and component models as their exports finish.
-The progress bar also reports preparation, compression and writing. The step count
-adjusts to omitted layers and compression mode; exports remain concurrent.
+The progress bar also reports preparation, geometry storage and writing. The step
+count adjusts to omitted layers; exports remain concurrent.
 Redirected output stays quiet; warnings and errors go to
 stderr. Add `--json` to print a report to stdout with source hash, exported
 references, prefix overrides and omissions:

@@ -53,7 +53,7 @@ enum Action {
         /// Overwrite an existing output file without prompting.
         #[arg(short, long)]
         force: bool,
-        /// Native geometry storage: compact compresses losslessly; fast skips compression.
+        /// Native geometry storage: compact compresses losslessly; fast stores geometry uncompressed.
         #[arg(long, value_enum, default_value = "compact")]
         compression: cad::Compression,
         #[command(flatten)]
@@ -169,7 +169,7 @@ fn run(cli: Cli) -> Result<Value> {
         overwrite = confirm_overwrite(output, force)?;
     }
     let progress = Progress::with_total(if output.is_some() {
-        layers.progress_steps() + 1 + usize::from(compression == cad::Compression::Compact)
+        layers.progress_steps() + 2
     } else {
         3
     });

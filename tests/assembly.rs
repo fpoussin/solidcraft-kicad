@@ -266,6 +266,63 @@ fn identical_models_share_geometry_but_keep_independent_placements() -> Result<(
     Ok(())
 }
 
+#[cfg(unix)]
+fn assert_same_native_archive_payloads(
+    left: &[u8],
+    right: &[u8],
+) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    use std::{collections::BTreeMap, io::Read};
+
+    type Entries = BTreeMap<String, (zip::CompressionMethod, Vec<u8>)>;
+
+    fn entries(bytes: &[u8]) -> std::result::Result<Entries, Box<dyn std::error::Error>> {
+        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+        let mut entries = BTreeMap::new();
+        for index in 0..archive.len() {
+            let mut entry = archive.by_index(index)?;
+            let name = entry.name()?.into_owned();
+            let method = entry.compression();
+            let mut data = Vec::new();
+            entry.read_to_end(&mut data)?;
+            if name == "cache/model.json" {
+                let mut model: Value = serde_json::from_slice(&data)?;
+                if let Some(features) = model
+                    .pointer_mut("/model/features")
+                    .and_then(Value::as_array_mut)
+                {
+                    for feature in features {
+                        if let Some(fields) = feature.as_object_mut() {
+                            fields.remove("ms");
+                        }
+                    }
+                }
+                data = serde_json::to_vec(&model)?;
+            }
+            entries.insert(name, (method, data));
+        }
+        Ok(entries)
+    }
+
+    let left = entries(left)?;
+    let right = entries(right)?;
+    assert_eq!(
+        left.keys().collect::<Vec<_>>(),
+        right.keys().collect::<Vec<_>>(),
+        "native archive entry lists differ"
+    );
+    for (name, (left_method, left_data)) in &left {
+        let (right_method, right_data) = right
+            .get(name)
+            .ok_or_else(|| format!("missing native archive entry {name}"))?;
+        assert_eq!(left_method, right_method, "compression changed for {name}");
+        assert!(
+            left_data == right_data,
+            "payload changed for {name} after normalizing SolidCraft feature timings"
+        );
+    }
+    Ok(())
+}
+
 #[test]
 #[cfg(unix)]
 fn both_build_paths_preserve_native_documents_and_report_compression()
@@ -293,10 +350,13 @@ fn both_build_paths_preserve_native_documents_and_report_compression()
                 assert!(!output.exists(), "published before all stages completed");
                 stages.borrow_mut().push(label);
             })?;
-            let expected = if compression == cad::Compression::Compact {
-                vec!["Compressing SolidCraft file", "Writing SolidCraft file"]
-            } else {
-                vec!["Writing SolidCraft file"]
+            let expected = match compression {
+                cad::Compression::Compact => {
+                    vec!["Compressing SolidCraft geometry", "Writing SolidCraft file"]
+                }
+                cad::Compression::Fast => {
+                    vec!["Storing SolidCraft geometry", "Writing SolidCraft file"]
+                }
             };
             assert_eq!(stages.into_inner(), expected);
             documents.push(solidcraft_engine::io::read_design(&std::fs::read(
@@ -308,14 +368,16 @@ fn both_build_paths_preserve_native_documents_and_report_compression()
             let mut archive = zip::ZipArchive::new(File::open(&output)?)?;
             for index in 0..archive.len() {
                 let entry = archive.by_index(index)?;
-                if entry.name()?.starts_with("blobs/") {
+                let name = entry.name()?.into_owned();
+                if name.starts_with("blobs/") {
                     assert_eq!(
                         entry.compression(),
                         if compression == cad::Compression::Compact {
                             zip::CompressionMethod::Deflated
                         } else {
                             zip::CompressionMethod::Stored
-                        }
+                        },
+                        "unexpected compression for {name} in {path} with {compression:?}"
                     );
                 }
             }
@@ -325,7 +387,8 @@ fn both_build_paths_preserve_native_documents_and_report_compression()
             );
             assert_eq!(std::fs::read(&output)?, old);
             cad::build_with_compression(stage, &output, false, true, compression)?;
-            assert_eq!(std::fs::read(&output)?, old);
+            let rebuilt = std::fs::read(&output)?;
+            assert_same_native_archive_payloads(&rebuilt, &old)?;
         }
         assert_eq!(documents[0], documents[1]);
     }
