@@ -1,7 +1,7 @@
-//! Best-effort background notifications and explicit, uncached release checks.
+//! Background release checks and opt-in replacement of the running executable.
 use std::{
     fs,
-    io::Read,
+    io::{self, BufRead, IsTerminal, Read, Write},
     path::{Path, PathBuf},
     sync::mpsc::{self, Receiver},
     thread,
@@ -11,6 +11,8 @@ use std::{
 use directories::ProjectDirs;
 use semver::Version;
 use serde::{Deserialize, Serialize};
+
+mod install;
 
 const INTERVAL: u64 = 24 * 60 * 60;
 const DOWNLOAD: &str = "https://github.com/fpoussin/solidcraft-kicad/releases/latest";
@@ -31,6 +33,13 @@ pub struct Report {
 }
 
 impl Report {
+    pub fn offer_update(&self) -> Result<(), String> {
+        if self.update_available {
+            offer_update(&self.latest)?;
+        }
+        Ok(())
+    }
+
     pub fn message(&self) -> String {
         if self.update_available {
             format!(
@@ -168,8 +177,46 @@ impl Check {
                 "Update available: solidcraft-kicad {latest} (current {}).\nDownload: {DOWNLOAD}",
                 env!("CARGO_PKG_VERSION")
             );
+            if let Err(error) = offer_update(&latest.to_string()) {
+                // A completed conversion remains successful if the optional update fails.
+                eprintln!("warning: update failed: {error}");
+            }
         }
     }
+}
+
+fn offer_update(latest: &str) -> Result<(), String> {
+    if !io::stdin().is_terminal() || !io::stderr().is_terminal() {
+        return Ok(());
+    }
+    let target = env!("BUILD_TARGET");
+    if install::asset_name(latest, target).is_err() {
+        return Ok(());
+    }
+    let executable = std::env::current_exe().map_err(|error| error.to_string())?;
+    let confirmed = confirm(
+        &mut io::stdin().lock(),
+        &mut io::stderr().lock(),
+        &executable,
+    )
+    .map_err(|error| error.to_string())?;
+    if confirmed {
+        eprintln!("Downloading solidcraft-kicad {latest}...");
+        install::install(latest, target)?;
+        eprintln!("Updated to solidcraft-kicad {latest}. The next invocation will use it.");
+    }
+    Ok(())
+}
+
+fn confirm(input: &mut impl BufRead, output: &mut impl Write, path: &Path) -> io::Result<bool> {
+    write!(output, "Replace {} with the update? [y/N] ", path.display())?;
+    output.flush()?;
+    let mut answer = String::new();
+    input.read_line(&mut answer)?;
+    Ok(matches!(
+        answer.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
 }
 
 fn now() -> u64 {
@@ -244,6 +291,27 @@ mod tests {
         Arc,
         atomic::{AtomicUsize, Ordering},
     };
+
+    #[test]
+    fn installation_requires_explicit_yes() -> io::Result<()> {
+        for answer in ["", "\n", "n\n", "no\n", "sure\n", "yesterday\n"] {
+            let mut output = Vec::new();
+            assert!(!confirm(
+                &mut answer.as_bytes(),
+                &mut output,
+                Path::new("client")
+            )?);
+            assert!(String::from_utf8_lossy(&output).ends_with("[y/N] "));
+        }
+        for answer in ["y\n", "Y\n", "yes\n", " YES \r\n"] {
+            assert!(confirm(
+                &mut answer.as_bytes(),
+                &mut Vec::new(),
+                Path::new("client")
+            )?);
+        }
+        Ok(())
+    }
 
     #[test]
     fn only_newer_stable_published_releases_are_notified() {

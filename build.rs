@@ -4,6 +4,7 @@ use semver::Version;
 use toml::Value;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    println!("cargo:rustc-env=BUILD_TARGET={}", env::var("TARGET")?);
     println!("cargo:rerun-if-changed=Cargo.toml");
     println!("cargo:rerun-if-changed=Cargo.lock");
     let root = std::path::PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);

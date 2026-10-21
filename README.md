@@ -84,11 +84,20 @@ solidcraft-kicad build path/to/board.kicad_pcb --json
 ```
 
 Release builds check GitHub for newer stable releases in the background, at most
-once a day, and show an update notice on interactive stderr after the command.
-Automatic checks never delay conversion; offline failures are silent. They are
-disabled for debug builds, `--json`, redirected stderr, and `--help`/`--version`.
-Use `--no-update-check` to disable checking and notices. The cache is stored in
-the platform's user cache directory under `solidcraft-kicad`.
+once a day, and offer to install a newer release after a successful command.
+The prompt defaults to **No**: only `y` or `yes` accepts; Enter or EOF cancels.
+Installation requires interactive stdin and stderr. The client downloads the
+matching platform archive, verifies its `SHA256SUMS` checksum, and replaces its
+own executable. The next invocation uses the new version. The installation
+directory must be writable; the updater does not request elevated privileges.
+Failed downloads or validation leave the installed binary unchanged, and update
+failures do not turn a successful conversion into an error.
+
+Automatic checks never delay conversion; offline check failures are silent.
+They are disabled for debug builds, `--json`, redirected stderr, and
+`--help`/`--version`. Use `--no-update-check` to disable checking, notices and
+installation prompts. The cache is stored in the platform's user cache directory
+under `solidcraft-kicad`.
 
 To check immediately, ignoring the daily cache, run:
 
@@ -100,7 +109,10 @@ solidcraft-kicad --check-update --json
 This checks and exits without a PCB or conversion. It works in debug builds and
 redirected output too, waits for the bounded request, and reports either a newer
 release or that you are up to date. An unsuccessful explicit check reports an
-error and exits unsuccessfully. `--json` prints the current and latest versions,
+error and exits unsuccessfully. In an interactive terminal, a newer release also
+offers the same default-No installation prompt; an accepted update that fails
+exits unsuccessfully. Redirected stdin or stderr and JSON checks never prompt or
+install. `--json` prints the current and latest versions,
 whether an update is available, and the download URL. It cannot be combined with
 `--no-update-check`.
 

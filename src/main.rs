@@ -25,10 +25,10 @@ mod update;
     about = "Import KiCad PCBs as native SolidCraft component assemblies"
 )]
 struct Cli {
-    /// Check GitHub for updates now, ignoring the daily cache, then exit.
+    /// Check GitHub now and offer to update (interactive terminals), then exit.
     #[arg(long, global = true, conflicts_with = "no_update_check")]
     check_update: bool,
-    /// Disable the release-build update check (interactive terminals only).
+    /// Disable the release-build update check and installation prompt.
     #[arg(long, global = true)]
     no_update_check: bool,
     /// Print the detailed JSON report on success.
@@ -281,6 +281,7 @@ fn main() -> ExitCode {
         update::force().map_err(Error::message).and_then(|report| {
             if !print_json {
                 println!("{}", report.message());
+                report.offer_update().map_err(Error::message)?;
             }
             Ok(serde_json::to_value(report)?)
         })
@@ -304,7 +305,9 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     };
-    updates.notify();
+    if status == ExitCode::SUCCESS {
+        updates.notify();
+    }
     status
 }
 

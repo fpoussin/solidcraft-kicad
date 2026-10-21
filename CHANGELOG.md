@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Offer self-updates after successful commands and interactive `--check-update`,
+  with a default-No prompt. Verify the platform archive's SHA-256 checksum before
+  replacing the running executable; JSON and noninteractive checks never install.
+
 ## 0.4.0
 
 - Upgrade SolidCraft crates and kernel patches to `v0.18.3` (native format 29; desktop 0.18.3 or newer).
