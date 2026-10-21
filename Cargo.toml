@@ -8,7 +8,7 @@ description = "Import KiCad PCBs as native SolidCraft component assemblies"
 
 [package.metadata.solidcraft]
 # First desktop release that reads the embedded engine's native format.
-minimum-version = "0.16.0"
+minimum-version = "0.18.3"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -22,8 +22,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 semver = "1"
 sha2 = "0.10"
-solidcraft-engine = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.16.2" }
-solidcraft-mcp = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.16.2" }
+solidcraft-engine = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.18.3" }
+solidcraft-mcp = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.18.3" }
 tempfile = "3"
 thiserror = "2"
 usvg = { version = "0.48.1", default-features = false }
@@ -38,11 +38,11 @@ toml = "1"
 # Upstream's kernel patches must match the engine release tag.
 # Cargo only applies patches from the top-level manifest.
 [patch.crates-io]
-matext4cgmath = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.16.2" }
-truck-geometry = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.16.2" }
-truck-meshalgo = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.16.2" }
-truck-shapeops = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.16.2" }
-truck-stepio = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.16.2" }
+matext4cgmath = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.18.3" }
+truck-geometry = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.18.3" }
+truck-meshalgo = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.18.3" }
+truck-shapeops = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.18.3" }
+truck-stepio = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.18.3" }
 
 [profile.dev]
 debug = 0

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Upgrade SolidCraft crates and kernel patches to `v0.18.3` (native format 29; desktop 0.18.3 or newer).
+
 ## 0.3.1
 
 - Compress native mesh and STEP payloads losslessly with Deflate level six by

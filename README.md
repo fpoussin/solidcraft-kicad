@@ -46,9 +46,9 @@ typical command-line utility. There is no runtime dependency on FreeCAD.
 README images use Git LFS; run `git lfs pull` if they are missing after cloning.
 
 <!-- solidcraft-compatibility:begin -->
-Offline builds embed SolidCraft **0.16.2** (`v0.16.2`).
-Generated designs use file format **27** and require
-**SolidCraft 0.16.0 or later** for opening and live insertion.
+Offline builds embed SolidCraft **0.18.3** (`v0.18.3`).
+Generated designs use file format **29** and require
+**SolidCraft 0.18.3 or later** for opening and live insertion.
 <!-- solidcraft-compatibility:end -->
 
 ## Build a native part assembly
