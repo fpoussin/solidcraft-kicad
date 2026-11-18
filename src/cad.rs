@@ -98,7 +98,7 @@ pub fn recipe(
     }
     let name = unique_name(&stage.inventory.name, &mut names);
     let mut steps = vec![
-        json!({"command": "component.create", "params": {"name": name, "parent": 0, "activate": false}}),
+        json!({"command": "component.create", "params": {"name": name, "parent": 0, "activate": false, "grounded": false}}),
     ];
     let mut children = Vec::new();
     for asset in &stage.assets {

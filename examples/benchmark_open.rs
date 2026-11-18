@@ -21,7 +21,10 @@ fn main() -> Result<()> {
         json!({"path": std::path::absolute(path)?}),
     )?;
     let open_seconds = start.elapsed().as_secs_f64();
-    let world = backend.session.world_state();
+    let world = backend
+        .session
+        .world_state()
+        .map_err(|e| Error::message(e.to_string()))?;
     let total_seconds = start.elapsed().as_secs_f64();
     let errors: Vec<_> = backend
         .session
@@ -36,13 +39,8 @@ fn main() -> Result<()> {
     let render_seconds = if let Some(output) = std::env::args_os().nth(2) {
         solidcraft_engine::capture::install(std::sync::Arc::new(|scene, camera, width, height| {
             Ok(solidcraft_engine::capture::Picture {
-                rgba: solidcraft_engine::render::render(
-                    scene,
-                    camera,
-                    width as usize,
-                    height as usize,
-                )
-                .rgba,
+                rgba: solidcraft_viewport::render(scene, camera, width as usize, height as usize)
+                    .rgba,
                 renderer: "cpu",
             })
         }));

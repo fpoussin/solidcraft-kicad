@@ -14,7 +14,7 @@ The following dependencies provide the implementation's main capabilities:
 
 | Dependency | Role | Upstream |
 | --- | --- | --- |
-| SolidCraft 0.14.0 | Native engine, B-rep geometry, headless backend, document persistence and authenticated control client | https://github.com/tangency-labs/solidcraft |
+| SolidCraft | Native engine, B-rep geometry, headless backend, document persistence and authenticated control client | https://github.com/tangency-labs/solidcraft |
 | KiUtils | Read-only KiCad typed metadata and S-expression parsing | https://github.com/Milind220/kiutils-rs |
 | KiCad CLI (external executable) | Model resolution and PCB/component GLB, STEP and SVG export | https://www.kicad.org/ |
 | usvg | Read KiCad's copper plots | https://github.com/linebender/resvg |
@@ -29,8 +29,8 @@ The following dependencies provide the implementation's main capabilities:
 | wait-timeout | Child-process timeout | https://github.com/alexcrichton/wait-timeout |
 | sha2 | Source fingerprint | https://github.com/RustCrypto/hashes |
 
-SolidCraft's required truck/matext4cgmath patches are reused at the same immutable
-upstream commit as its engine. Cargo.lock records all direct and transitive
+SolidCraft's engine, control client, viewport and SolidCore geometry records use
+the same immutable upstream release. Cargo.lock records all direct and transitive
 versions. Release archives include available dependency license notices and a
 dependency manifest under `THIRD-PARTY-LICENSES`. The original notices are also
 distributed with their Cargo sources.

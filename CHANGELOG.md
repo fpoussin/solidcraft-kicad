@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Upgrade the embedded SolidCraft engine and control client to `v0.44.1`
+  (native format 58; desktop 0.44.0 or newer), including the SolidCore kernel
+  and shared mesh storage.
+
 - Offer self-updates after successful commands and interactive `--check-update`,
   with a default-No prompt. Verify the platform archive's SHA-256 checksum before
   replacing the running executable; JSON and noninteractive checks never install.

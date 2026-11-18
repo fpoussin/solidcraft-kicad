@@ -2,15 +2,16 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     path::Path,
+    sync::Arc,
 };
 
 use sha2::{Digest, Sha256};
+use solidcore_record::Vec3;
 use solidcraft_engine::{
     doc::{
         Document, FeatureKind, IDENTITY, Mat, MeshData, appearance::Look, apply_point, mat_inverse,
         mat_mul, pbr_appearance::PbrParameters,
     },
-    geom::Vec3,
     io::GltfImport,
 };
 
@@ -118,7 +119,11 @@ pub(crate) fn prepare_with_copper(
                 .all(|v| (v - z).abs() < 1e-6)
         {
             let offset = if z > (low + high) * 0.5 { 0.1 } else { -0.1 };
-            for z in item.mesh.positions.iter_mut().skip(2).step_by(3) {
+            for z in Arc::make_mut(&mut item.mesh.positions)
+                .iter_mut()
+                .skip(2)
+                .step_by(3)
+            {
                 *z += offset;
             }
         }
@@ -160,6 +165,12 @@ pub(crate) fn prepare_with_copper(
     let parent = doc
         .add_component(Some(&inventory.name), 0)
         .map_err(|e| Error::message(e.to_string()))?;
+    // The upstream default grounds the first part; imported assemblies must be movable.
+    for occurrence in &mut doc.occurrences {
+        if occurrence.component == parent {
+            occurrence.grounded = false;
+        }
+    }
     let mut names = BTreeSet::from([inventory.name.clone()]);
     let mut parts = Vec::new();
     let mut definitions = BTreeMap::new();
@@ -380,12 +391,12 @@ fn compact_vertices(mesh: &mut MeshData) -> Result<()> {
         });
         remap.push(index);
     }
-    for index in &mut mesh.triangles {
+    for index in Arc::make_mut(&mut mesh.triangles) {
         *index = *remap
             .get(*index as usize)
             .ok_or_else(|| Error::message("invalid mesh index"))?;
     }
-    mesh.positions = positions;
+    mesh.positions = positions.into();
     Ok(())
 }
 
@@ -414,7 +425,7 @@ fn model_key(meshes: &[ModelMesh]) -> Result<[u8; 32]> {
     for ModelMesh { mesh, look } in meshes {
         let mut hash = Sha256::new();
         hash.update((mesh.positions.len() as u64).to_le_bytes());
-        for &coordinate in &mesh.positions {
+        for &coordinate in mesh.positions.iter() {
             if !coordinate.is_finite() || coordinate.abs() > 1e9 {
                 return Err(Error::message("invalid model coordinate"));
             }
@@ -422,7 +433,7 @@ fn model_key(meshes: &[ModelMesh]) -> Result<[u8; 32]> {
             hash.update(((coordinate * 1e6).round() as i64).to_le_bytes());
         }
         hash.update((mesh.triangles.len() as u64).to_le_bytes());
-        for &index in &mesh.triangles {
+        for &index in mesh.triangles.iter() {
             hash.update(index.to_le_bytes());
         }
         hash.update([u8::from(mesh.color.is_some())]);
@@ -517,7 +528,7 @@ impl Walker<'_> {
                     .get(i)
                     .ok_or_else(|| Error::message("invalid GLB mesh index"))?
                     .clone();
-                for p in mesh.positions.as_chunks_mut::<3>().0 {
+                for p in Arc::make_mut(&mut mesh.positions).as_chunks_mut::<3>().0 {
                     let q = apply_point(&relative, Vec3::new(p[0], p[1], p[2]));
                     // The reader scales metres to mm; rotate glTF Y-up to KiCad Z-up.
                     *p = [q.x, -q.z, q.y];
@@ -610,10 +621,13 @@ mod tests {
                 1.0000000000000002,
                 0.,
                 0.,
-            ],
-            triangles: vec![0, 1, 2, 3, 4, 5, 0, 6, 2],
+            ]
+            .into(),
+            triangles: vec![0, 1, 2, 3, 4, 5, 0, 6, 2].into(),
+            corner_normals: [0., 0., 1.].repeat(9).into(),
             color: Some([0.2, 0.4, 0.6]),
         };
+        let original = mesh.clone();
         let before = expanded(&mesh);
         let display = solidcraft_engine::kernel::mesh_body(
             &mesh
@@ -629,6 +643,9 @@ mod tests {
         compact_vertices(&mut mesh)?;
         assert_eq!(mesh.positions.len(), 15);
         assert_eq!(expanded(&mesh), before);
+        assert_eq!(mesh.corner_normals, original.corner_normals);
+        assert_eq!(original.positions.len(), 21);
+        assert_eq!(&*original.triangles, &[0, 1, 2, 3, 4, 5, 0, 6, 2]);
         let after = solidcraft_engine::kernel::mesh_body(
             &mesh
                 .positions
@@ -642,11 +659,11 @@ mod tests {
         .map_err(|e| Error::message(e.to_string()))?;
         assert_eq!(
             display
-                .tessellate(0.1)
+                .mesh(&solidcraft_engine::kernel::MeshTolerance::chord(0.1))
                 .map_err(|e| Error::message(e.to_string()))?
                 .normals,
             after
-                .tessellate(0.1)
+                .mesh(&solidcraft_engine::kernel::MeshTolerance::chord(0.1))
                 .map_err(|e| Error::message(e.to_string()))?
                 .normals
         );

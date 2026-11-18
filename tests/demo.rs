@@ -108,7 +108,10 @@ fn demo_mesh_acceptance() -> Result<()> {
     );
     assert_eq!(backend.session.doc.occurrences.len(), 78);
     assert!(backend.session.doc.components.len() < 78); // Repeated parts share geometry.
-    let world = backend.session.world_state();
+    let world = backend
+        .session
+        .world_state()
+        .map_err(|e| Error::message(e.to_string()))?;
     assert_eq!(world.bodies.iter().filter(|b| !b.body.is_mesh()).count(), 1);
     assert!(world.bodies.iter().filter(|b| b.body.is_mesh()).count() > 76);
     Ok(())

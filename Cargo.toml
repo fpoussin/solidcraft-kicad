@@ -8,7 +8,7 @@ description = "Import KiCad PCBs as native SolidCraft component assemblies"
 
 [package.metadata.solidcraft]
 # First desktop release that reads the embedded engine's native format.
-minimum-version = "0.18.3"
+minimum-version = "0.44.0"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -24,8 +24,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 semver = "1"
 sha2 = "0.10"
-solidcraft-engine = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.18.3" }
-solidcraft-mcp = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.18.3" }
+solidcore-record = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.44.1" }
+solidcraft-engine = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.44.1" }
+solidcraft-mcp = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.44.1" }
+solidcraft-viewport = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.44.1" }
 tar = "0.4"
 tempfile = "3"
 thiserror = "2"
@@ -38,14 +40,9 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 semver = "1"
 toml = "1"
 
-# Upstream's kernel patches must match the engine release tag.
-# Cargo only applies patches from the top-level manifest.
+# Upstream patches, when required, must match the engine release tag.
+# SolidCraft 0.44.1 needs no crates.io patches in this dependency graph.
 [patch.crates-io]
-matext4cgmath = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.18.3" }
-truck-geometry = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.18.3" }
-truck-meshalgo = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.18.3" }
-truck-shapeops = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.18.3" }
-truck-stepio = { git = "https://github.com/tangency-labs/solidcraft.git", tag = "v0.18.3" }
 
 [profile.dev]
 debug = 0

@@ -160,7 +160,8 @@ fn surface(shapes: &Shapes, z: f64, top: bool, look: Option<Look>) -> ModelMesh 
                 // Keep the original mask Z so adjacent surfaces remain coplanar.
                 .flat_map(|[x, y]| [(x * 1e4).round() / 1e4, (y * 1e4).round() / 1e4, z])
                 .collect(),
-            triangles,
+            triangles: triangles.into(),
+            corner_normals: Default::default(),
             color: look.as_ref().map(Look::rgb),
         },
         look,
@@ -345,11 +346,20 @@ mod tests {
         let mut substrate = surface(&rectangle(10., -30., 10., 10.), 0., false, None);
         let top = surface(&rectangle(10., -30., 10., 10.), 1.6, true, None);
         let offset = substrate.mesh.positions.len() as u32 / 3;
-        substrate.mesh.positions.extend(top.mesh.positions);
-        substrate
+        substrate.mesh.positions = substrate
+            .mesh
+            .positions
+            .iter()
+            .copied()
+            .chain(top.mesh.positions.iter().copied())
+            .collect();
+        substrate.mesh.triangles = substrate
             .mesh
             .triangles
-            .extend(top.mesh.triangles.into_iter().map(|i| i + offset));
+            .iter()
+            .copied()
+            .chain(top.mesh.triangles.iter().map(|i| i + offset))
+            .collect();
         substrate.look = Some(Look {
             name: "core".into(),
             color: [100, 100, 0],

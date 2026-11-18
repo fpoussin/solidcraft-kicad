@@ -2,6 +2,7 @@
 use std::{path::Path, time::Duration};
 
 use serde_json::{Value, json};
+use solidcraft_engine::geom::MeshGeom;
 use solidcraft_kicad::{
     cad,
     config::Settings,
@@ -208,7 +209,10 @@ fn identical_models_share_geometry_but_keep_independent_placements() -> Result<(
         .ok_or_else(|| Error::message("missing U1"))?
         .clone();
     assert_eq!(r.component, u.component);
-    let world = b.session.world_state();
+    let world = b
+        .session
+        .world_state()
+        .map_err(|e| Error::message(e.to_string()))?;
     assert_eq!(world.bodies.len(), 3);
     let bounds: Vec<_> = world
         .bodies
@@ -250,7 +254,10 @@ fn identical_models_share_geometry_but_keep_independent_placements() -> Result<(
             .map(|o| o.transform),
         Some(r.transform)
     );
-    let moved = b.session.world_state();
+    let moved = b
+        .session
+        .world_state()
+        .map_err(|e| Error::message(e.to_string()))?;
     let bounds: Vec<_> = moved
         .bodies
         .iter()
@@ -365,6 +372,11 @@ fn both_build_paths_preserve_native_documents_and_report_compression()
             let mut backend = Headless::default();
             cad::execute(&mut backend, "doc.open", json!({"path": output}))?;
             assert_eq!(cad::validate(&mut backend)?["body_count"], 3);
+            cad::execute(
+                &mut backend,
+                "occurrence.move",
+                json!({"occurrence": "board:1", "translate": [10, 20, 30]}),
+            )?;
             let mut archive = zip::ZipArchive::new(File::open(&output)?)?;
             for index in 0..archive.len() {
                 let entry = archive.by_index(index)?;
@@ -480,7 +492,10 @@ fn board_layers_retain_both_side_colors_finish_and_batched_geometry() -> Result<
         drop(stage);
         let mut backend = Headless::default();
         cad::execute(&mut backend, "doc.open", json!({"path":native}))?;
-        let state = backend.session.world_state();
+        let state = backend
+            .session
+            .world_state()
+            .map_err(|e| Error::message(e.to_string()))?;
         assert_eq!(
             state.bodies.len(),
             8,
@@ -869,7 +884,10 @@ fn native_parts_reopen_without_assets_and_move_together() -> Result<()> {
         assert!(names.contains(&name));
     }
     assert!(cad::inspect(&mut b)?["metadata"][cad::METADATA_KEY].is_object());
-    let state = b.session.world_state();
+    let state = b
+        .session
+        .world_state()
+        .map_err(|e| Error::message(e.to_string()))?;
     let colors: std::collections::BTreeSet<_> = state
         .bodies
         .iter()
@@ -979,6 +997,7 @@ fn native_parts_reopen_without_assets_and_move_together() -> Result<()> {
     let part_body = b
         .session
         .world_state()
+        .map_err(|e| Error::message(e.to_string()))?
         .bodies
         .iter()
         .find(|body| b.session.doc.model_body_component(body) == part)
@@ -1142,7 +1161,14 @@ fn cli_build_is_quiet_by_default_and_json_is_opt_in() -> Result<()> {
         }
         let mut b = Headless::default();
         cad::execute(&mut b, "doc.open", json!({"path": output}))?;
-        assert_eq!(b.session.world_state().bodies.len(), 3);
+        assert_eq!(
+            b.session
+                .world_state()
+                .map_err(|e| Error::message(e.to_string()))?
+                .bodies
+                .len(),
+            3
+        );
     }
     Ok(())
 }
@@ -1477,7 +1503,10 @@ fn gps_mesh_acceptance() -> Result<()> {
     drop(stage);
     let mut b = Headless::default();
     cad::execute(&mut b, "doc.open", json!({"path": native}))?;
-    let state = b.session.world_state();
+    let state = b
+        .session
+        .world_state()
+        .map_err(|e| Error::message(e.to_string()))?;
     assert_eq!(
         state
             .bodies
@@ -1551,7 +1580,12 @@ fn gps_acceptance() -> Result<()> {
     let volume = result["measurement"]["total"]["volume_mm3"]
         .as_f64()
         .ok_or_else(|| Error::message("missing volume"))?;
-    assert!((volume - 1740.0829945).abs() < 1e-5);
+    // Curved STEP mass integration differs slightly between kernel releases.
+    let expected_volume = 1740.0829945;
+    assert!(
+        (volume - expected_volume).abs() < expected_volume * 1e-6,
+        "GPS volume changed: {volume} mm3"
+    );
     drop(stage);
     let mut b = Headless::default();
     cad::execute(&mut b, "doc.open", json!({"path":native}))?;

@@ -46,9 +46,9 @@ typical command-line utility. There is no runtime dependency on FreeCAD.
 README images use Git LFS; run `git lfs pull` if they are missing after cloning.
 
 <!-- solidcraft-compatibility:begin -->
-Offline builds embed SolidCraft **0.18.3** (`v0.18.3`).
-Generated designs use file format **29** and require
-**SolidCraft 0.18.3 or later** for opening and live insertion.
+Offline builds embed SolidCraft **0.44.1** (`v0.44.1`).
+Generated designs use file format **58** and require
+**SolidCraft 0.44.0 or later** for opening and live insertion.
 <!-- solidcraft-compatibility:end -->
 
 ## Build a native part assembly
@@ -352,19 +352,18 @@ python3 scripts/validate-desktop.py --app /path/to/SolidCraft.AppImage \
   --native /path/to/board.solidcraft --max-open-seconds 3
 ```
 
-A development benchmark with 323 placed parts and all default board details,
-including outer copper, converted in **7.39 s** with default compact compression.
-SolidCraft 0.16.2 opened the result in **1.72 s**, with its first render ready in
-**2.51 s** in the isolated desktop. The placed parts, including the board, share
-42 geometry definitions. All board layers together use nine mesh bodies alongside
-the CAD substrate; the native file occupies
-**7.13 MB**, down from **27.59 MB** before compression and component vertex
-deduplication (a **74% reduction**). With `--compression fast`, the same board
-occupies **26.17 MB**. A smaller board went from **467 KB** to **122 KB** with
-compact compression and converted in **0.69 s**. Both compression modes retain
-the same triangle coordinates, winding, appearances and component placements.
-One unavailable model was reported as an omission. These are measured wall times
-on the development machine, excluding application startup.
+A development benchmark with 331 imported parts, including the board and all
+its default details, converted in **8.10 s** with compact compression.
+SolidCraft 0.44.1 opened the result in **0.77 s**, with its first render ready in
+**1.64 s** in the isolated desktop. The self-contained native file occupies
+**7.15 MB**, compared with **26.26 MB** using `--compression fast`; repeated
+component models share geometry while retaining independent placements.
+A smaller board converted in **1.13 s**, occupied **122 KB** with compact
+compression (**403 KB** with fast compression), and opened and rendered in
+**0.54 s**. Both compression modes retain the same triangle coordinates,
+winding, appearances and component placements. One unavailable model on the
+large board was reported as an omission. These are measured wall times on the
+development machine, excluding application startup.
 
 No KiCad source files are rewritten. KiCad itself can create local `.kicad_prl`
 preferences when loading a project that has none.

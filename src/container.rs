@@ -73,8 +73,9 @@ mod tests {
         )?;
         let mesh = MeshData {
             name: "first".into(),
-            positions: vec![-0., 0., 0., 1.0000000000000002, 0., 0., 0., 1., 0.],
-            triangles: [0, 1, 2].repeat(128),
+            positions: vec![-0., 0., 0., 1.0000000000000002, 0., 0., 0., 1., 0.].into(),
+            triangles: [0, 1, 2].repeat(128).into(),
+            corner_normals: [0., 0., 1.].repeat(384).into(),
             color: Some([0.2, 0.4, 0.6]),
         };
         let mut second = mesh.clone();
